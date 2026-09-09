@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+gui_config.json
+outputs/
+test_output_deepseek.md
+*.md.bak
