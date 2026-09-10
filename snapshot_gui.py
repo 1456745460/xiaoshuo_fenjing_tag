@@ -41,9 +41,15 @@ class SnapshotApp(tk.Tk):
         self.busy = False
         self.last_output_path: Path | None = None
         self.model_var = tk.StringVar(value=str(self.cfg.get("model") or core.DEFAULT_MODEL))
+        saved_style = str(self.cfg.get("prompt_style") or core.DEFAULT_PROMPT_STYLE)
+        try:
+            saved_style = core.normalize_prompt_style(saved_style)
+        except ValueError:
+            saved_style = core.DEFAULT_PROMPT_STYLE
+        self.prompt_style_var = tk.StringVar(value=saved_style)
         self.show_key = False
         self._build()
-        self._center_window(760, 620)
+        self._center_window(760, 660)
         self.deiconify()
         self.lift()
         self.focus_force()
@@ -99,6 +105,24 @@ class SnapshotApp(tk.Tk):
             row=0, column=1, padx=(8, 0)
         )
 
+        ttk.Label(form, text="提示词类型").grid(row=5, column=0, sticky=tk.W, pady=6)
+        style_row = ttk.Frame(form)
+        style_row.grid(row=5, column=1, columnspan=2, sticky=tk.W, pady=6)
+        ttk.Radiobutton(
+            style_row,
+            text="Danbooru",
+            variable=self.prompt_style_var,
+            value=core.PROMPT_STYLE_DANBOORU,
+            command=self._persist,
+        ).pack(side=tk.LEFT)
+        ttk.Radiobutton(
+            style_row,
+            text="自然语言",
+            variable=self.prompt_style_var,
+            value=core.PROMPT_STYLE_NATURAL,
+            command=self._persist,
+        ).pack(side=tk.LEFT, padx=(16, 0))
+
         actions = ttk.Frame(root)
         actions.pack(fill=tk.X, pady=(16, 8))
         self.start_btn = ttk.Button(actions, text="开始生成", command=self.start_generate)
@@ -125,8 +149,9 @@ class SnapshotApp(tk.Tk):
             tk.END,
             "1. 填写 API 地址和 Key\n"
             "2. 点「获取模型」后选择模型\n"
-            "3. 选择 txt 小说，点「开始生成」\n"
-            "4. 完成后会自动打开生成的 md，也可点「打开文件所在目录」\n",
+            "3. 选择提示词类型：Danbooru 或 自然语言\n"
+            "4. 选择 txt 小说，点「开始生成」\n"
+            "5. 完成后会自动打开生成的 md，也可点「打开文件所在目录」\n",
         )
         self.log.configure(state=tk.DISABLED)
 
@@ -173,6 +198,7 @@ class SnapshotApp(tk.Tk):
             "max_tokens": self.max_tokens.get().strip(),
             "model": self.model_var.get().strip(),
             "novel_path": self.novel_path.get().strip(),
+            "prompt_style": self.prompt_style_var.get().strip(),
             "models": list(self.model_combo["values"] or []),
         }
 
@@ -250,10 +276,19 @@ class SnapshotApp(tk.Tk):
         except (FileNotFoundError, IsADirectoryError, OSError) as exc:
             messagebox.showerror("文件错误", str(exc))
             return
+        try:
+            prompt_style = core.normalize_prompt_style(fields["prompt_style"])
+        except ValueError as exc:
+            messagebox.showwarning("参数错误", str(exc))
+            return
 
         self._persist()
         self._set_busy(True, "正在生成，可能需要 1~3 分钟...")
-        self._append_log(f"开始生成：{novel_path.name} / {fields['model']} / max_tokens={max_tokens}")
+        style_label = core.PROMPT_STYLE_LABELS[prompt_style]
+        self._append_log(
+            f"开始生成：{novel_path.name} / {fields['model']} / "
+            f"max_tokens={max_tokens} / 提示词={style_label}"
+        )
 
         def worker() -> None:
             try:
@@ -263,6 +298,7 @@ class SnapshotApp(tk.Tk):
                     api_key=fields["api_key"],
                     model=fields["model"],
                     max_tokens=max_tokens,
+                    prompt_style=prompt_style,
                 )
                 self.after(0, lambda result=result: self._on_generated(result, None))
             except Exception as exc:

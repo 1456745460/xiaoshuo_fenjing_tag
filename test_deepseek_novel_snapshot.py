@@ -25,14 +25,20 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         nargs="?",
         help="小说 txt 路径。省略则使用 samples/snapshot_test_excerpt.txt",
     )
+    parser.add_argument(
+        "--style",
+        default=os.environ.get("DEEPSEEK_PROMPT_STYLE", core.DEFAULT_PROMPT_STYLE),
+        help="提示词类型：danbooru 或 natural（自然语言）。也可用环境变量 DEEPSEEK_PROMPT_STYLE",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     try:
+        prompt_style = core.normalize_prompt_style(args.style)
         novel_path = core.resolve_novel_path(args.novel)
-        system_prompt = core.load_text(core.PROMPT_PATH)
+        system_prompt = core.load_text(core.prompt_path_for(prompt_style))
         max_chars = int(os.environ.get("DEEPSEEK_NOVEL_MAX_CHARS", str(core.DEFAULT_NOVEL_MAX_CHARS)))
         novel, truncated = core.clip_novel(core.load_text(novel_path), max_chars)
     except (FileNotFoundError, IsADirectoryError, UnicodeDecodeError, OSError, ValueError) as exc:
@@ -54,6 +60,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"模型: {model}")
     print(f"小说: {novel_path}")
+    print(f"提示词类型: {core.PROMPT_STYLE_LABELS[prompt_style]} ({prompt_style})")
     print(f"系统提示词字数: {len(system_prompt)}")
     print(f"小说送入字数: {len(novel)}")
     if truncated:
@@ -68,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
             model=model,
             max_tokens=max_tokens,
             novel_max_chars=max_chars,
+            prompt_style=prompt_style,
         )
     except Exception as exc:
         print(str(exc), file=sys.stderr)

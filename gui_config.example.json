@@ -4,5 +4,6 @@
   "max_tokens": "16384",
   "model": "deepseek-v4-pro",
   "novel_path": "",
+  "prompt_style": "danbooru",
   "models": []
 }
