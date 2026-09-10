@@ -36,6 +36,10 @@ DEFAULT_API_URL = "https://api.deepseek.com"
 DEFAULT_MODEL = "deepseek-v4-pro"
 DEFAULT_MAX_TOKENS = 16384
 DEFAULT_NOVEL_MAX_CHARS = 20000
+MIN_NODE_COUNT = 10
+MAX_NODE_COUNT = 20
+DEFAULT_NODE_COUNT = 12
+NODE_COUNT_PLACEHOLDER = "{{NODE_COUNT}}"
 _PROMPT_STYLE_ALIASES = {
     "danbooru": PROMPT_STYLE_DANBOORU,
     "tag": PROMPT_STYLE_DANBOORU,
@@ -170,6 +174,31 @@ def prompt_path_for(style: str) -> Path:
     return path
 
 
+def normalize_node_count(raw: object) -> int:
+    try:
+        value = int(str(raw).strip())
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"分镜数必须是 {MIN_NODE_COUNT} 到 {MAX_NODE_COUNT} 的整数"
+        ) from exc
+    if value < MIN_NODE_COUNT or value > MAX_NODE_COUNT:
+        raise ValueError(
+            f"分镜数必须是 {MIN_NODE_COUNT} 到 {MAX_NODE_COUNT} 的整数"
+        )
+    return value
+
+
+def node_count_choices() -> list[str]:
+    return [str(n) for n in range(MIN_NODE_COUNT, MAX_NODE_COUNT + 1)]
+
+
+def render_system_prompt(text: str, node_count: int) -> str:
+    count = normalize_node_count(node_count)
+    if NODE_COUNT_PLACEHOLDER not in text:
+        raise ValueError(f"系统提示词缺少 {NODE_COUNT_PLACEHOLDER} 占位符")
+    return text.replace(NODE_COUNT_PLACEHOLDER, str(count))
+
+
 def clip_novel(text: str, max_chars: int = DEFAULT_NOVEL_MAX_CHARS) -> tuple[str, bool]:
     stripped = text.strip()
     if max_chars <= 0 or len(stripped) <= max_chars:
@@ -185,8 +214,10 @@ def build_user_prompt(
     novel: str,
     novel_name: str,
     prompt_style: str = DEFAULT_PROMPT_STYLE,
+    node_count: int = DEFAULT_NODE_COUNT,
 ) -> str:
     style = normalize_prompt_style(prompt_style)
+    count = normalize_node_count(node_count)
     if style == PROMPT_STYLE_NATURAL:
         prompt_rule = (
             "每个节点的中文提示词和英文提示词必须是完整自然语言画面描述，"
@@ -201,7 +232,7 @@ def build_user_prompt(
         )
     return (
         "请根据下面这篇 txt 小说正文，严格执行系统提示词。\n"
-        "本次输出 10 到 12 个关键节点。状态表写要点即可，"
+        f"本次必须输出正好 {count} 个关键节点，不多不少。状态表写要点即可，"
         f"但{prompt_rule}\n"
         "必须先给角色一致性档案，再给节点。不要寒暄，不要解释用法。\n"
         "防串台：禁止把发色、眼镜、服装混成一袋；一人戴眼镜则另一人必须明确不戴。\n"
@@ -230,8 +261,13 @@ def extract_content(api_result: dict) -> str:
     return content
 
 
-def evaluate(content: str, prompt_style: str = DEFAULT_PROMPT_STYLE) -> list[str]:
+def evaluate(
+    content: str,
+    prompt_style: str = DEFAULT_PROMPT_STYLE,
+    node_count: int = DEFAULT_NODE_COUNT,
+) -> list[str]:
     style = normalize_prompt_style(prompt_style)
+    expected = normalize_node_count(node_count)
     has_bible = "角色一致性档案" in content or "锁定英文" in content
     node_hits = re.findall(r"(?:^|\n)#*\s*节点\s*0?\d+", content)
     cn_hits = re.findall(r"中文提示词", content)
@@ -242,16 +278,17 @@ def evaluate(content: str, prompt_style: str = DEFAULT_PROMPT_STYLE) -> list[str
         content,
         flags=re.I,
     )
-    node_count = max(len(node_hits), len(cn_hits), len(en_hits))
+    found_count = max(len(node_hits), len(cn_hits), len(en_hits))
     lines = [
         f"提示词类型: {PROMPT_STYLE_LABELS[style]}",
+        f"要求分镜数: {expected}",
         f"角色档案: {'有' if has_bible else '缺失'}",
         f"节点标题数: {len(node_hits)}",
         f"中文提示词块: {len(cn_hits)}",
         f"英文提示词块: {len(en_hits)}",
         f"禁用质量套话: {quality_hits or '无'}",
     ]
-    structure_ok = has_bible and 10 <= node_count <= 15 and not quality_hits
+    structure_ok = has_bible and found_count == expected and not quality_hits
     if style == PROMPT_STYLE_NATURAL:
         lines.append(f"Danbooru tag 残留: {len(tag_hits)}")
         ok = structure_ok
@@ -325,17 +362,20 @@ def write_output(
     report: list[str],
     output_path: Path | None = None,
     prompt_style: str = DEFAULT_PROMPT_STYLE,
+    node_count: int = DEFAULT_NODE_COUNT,
 ) -> Path:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     target = output_path or (OUTPUT_DIR / f"{novel_path.stem}_{stamp}.md")
     style = normalize_prompt_style(prompt_style)
+    count = normalize_node_count(node_count)
     header = [
         "# 小说节点快照",
         "",
         f"- 模型: `{model}`",
         f"- 小说: `{novel_path}`",
         f"- 提示词类型: `{PROMPT_STYLE_LABELS[style]}` ({style})",
+        f"- 分镜数: `{count}`",
         f"- prompt_tokens: {usage.get('prompt_tokens', '未知')}",
         f"- completion_tokens: {usage.get('completion_tokens', '未知')}",
         f"- total_tokens: {usage.get('total_tokens', '未知')}",
@@ -363,13 +403,15 @@ def generate_snapshot(
     max_tokens: int,
     novel_max_chars: int = DEFAULT_NOVEL_MAX_CHARS,
     prompt_style: str = DEFAULT_PROMPT_STYLE,
+    node_count: int = DEFAULT_NODE_COUNT,
 ) -> dict:
     style = normalize_prompt_style(prompt_style)
-    system_prompt = load_text(prompt_path_for(style))
+    count = normalize_node_count(node_count)
+    system_prompt = render_system_prompt(load_text(prompt_path_for(style)), count)
     novel, truncated = clip_novel(load_text(novel_path), novel_max_chars)
     if not novel:
         raise ValueError(f"小说文件是空的: {novel_path}")
-    user_prompt = build_user_prompt(novel, novel_path.name, style)
+    user_prompt = build_user_prompt(novel, novel_path.name, style, count)
     result = chat_completion(
         api_url=api_url,
         api_key=api_key,
@@ -380,7 +422,7 @@ def generate_snapshot(
     )
     content = extract_content(result)
     usage = result.get("usage") or {}
-    report = evaluate(content, style)
+    report = evaluate(content, style, count)
     output_path = write_output(
         content=content,
         novel_path=novel_path,
@@ -388,6 +430,7 @@ def generate_snapshot(
         usage=usage,
         report=report,
         prompt_style=style,
+        node_count=count,
     )
     return {
         "content": content,
@@ -398,6 +441,7 @@ def generate_snapshot(
         "novel_chars": len(novel),
         "system_chars": len(system_prompt),
         "prompt_style": style,
+        "node_count": count,
     }
 
 

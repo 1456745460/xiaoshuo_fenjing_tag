@@ -36,7 +36,7 @@ class SnapshotApp(tk.Tk):
         super().__init__()
         self.withdraw()
         self.title("小说节点快照生成器")
-        self.minsize(680, 540)
+        self.minsize(680, 580)
         self.cfg = load_config()
         self.busy = False
         self.last_output_path: Path | None = None
@@ -47,9 +47,16 @@ class SnapshotApp(tk.Tk):
         except ValueError:
             saved_style = core.DEFAULT_PROMPT_STYLE
         self.prompt_style_var = tk.StringVar(value=saved_style)
+        try:
+            saved_count = core.normalize_node_count(
+                self.cfg.get("node_count") or core.DEFAULT_NODE_COUNT
+            )
+        except ValueError:
+            saved_count = core.DEFAULT_NODE_COUNT
+        self.node_count_var = tk.StringVar(value=str(saved_count))
         self.show_key = False
         self._build()
-        self._center_window(760, 660)
+        self._center_window(760, 700)
         self.deiconify()
         self.lift()
         self.focus_force()
@@ -123,6 +130,17 @@ class SnapshotApp(tk.Tk):
             command=self._persist,
         ).pack(side=tk.LEFT, padx=(16, 0))
 
+        ttk.Label(form, text="分镜数").grid(row=6, column=0, sticky=tk.W, pady=6)
+        self.node_count_combo = ttk.Combobox(
+            form,
+            textvariable=self.node_count_var,
+            values=core.node_count_choices(),
+            state="readonly",
+            width=8,
+        )
+        self.node_count_combo.grid(row=6, column=1, sticky=tk.W, pady=6)
+        self.node_count_combo.bind("<<ComboboxSelected>>", lambda _event: self._persist())
+
         actions = ttk.Frame(root)
         actions.pack(fill=tk.X, pady=(16, 8))
         self.start_btn = ttk.Button(actions, text="开始生成", command=self.start_generate)
@@ -150,8 +168,9 @@ class SnapshotApp(tk.Tk):
             "1. 填写 API 地址和 Key\n"
             "2. 点「获取模型」后选择模型\n"
             "3. 选择提示词类型：Danbooru 或 自然语言\n"
-            "4. 选择 txt 小说，点「开始生成」\n"
-            "5. 完成后会自动打开生成的 md，也可点「打开文件所在目录」\n",
+            "4. 下拉选择分镜数（10 到 20，生成固定数量）\n"
+            "5. 选择 txt 小说，点「开始生成」\n"
+            "6. 完成后会自动打开生成的 md，也可点「打开文件所在目录」\n",
         )
         self.log.configure(state=tk.DISABLED)
 
@@ -199,6 +218,7 @@ class SnapshotApp(tk.Tk):
             "model": self.model_var.get().strip(),
             "novel_path": self.novel_path.get().strip(),
             "prompt_style": self.prompt_style_var.get().strip(),
+            "node_count": self.node_count_var.get().strip(),
             "models": list(self.model_combo["values"] or []),
         }
 
@@ -281,13 +301,18 @@ class SnapshotApp(tk.Tk):
         except ValueError as exc:
             messagebox.showwarning("参数错误", str(exc))
             return
+        try:
+            node_count = core.normalize_node_count(fields["node_count"])
+        except ValueError as exc:
+            messagebox.showwarning("参数错误", str(exc))
+            return
 
         self._persist()
         self._set_busy(True, "正在生成，可能需要 1~3 分钟...")
         style_label = core.PROMPT_STYLE_LABELS[prompt_style]
         self._append_log(
             f"开始生成：{novel_path.name} / {fields['model']} / "
-            f"max_tokens={max_tokens} / 提示词={style_label}"
+            f"max_tokens={max_tokens} / 提示词={style_label} / 分镜数={node_count}"
         )
 
         def worker() -> None:
@@ -299,6 +324,7 @@ class SnapshotApp(tk.Tk):
                     model=fields["model"],
                     max_tokens=max_tokens,
                     prompt_style=prompt_style,
+                    node_count=node_count,
                 )
                 self.after(0, lambda result=result: self._on_generated(result, None))
             except Exception as exc:
