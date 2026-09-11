@@ -33,7 +33,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--nodes",
         default=os.environ.get("DEEPSEEK_NODE_COUNT", str(core.DEFAULT_NODE_COUNT)),
-        help="固定分镜数，10 到 20。也可用环境变量 DEEPSEEK_NODE_COUNT",
+        help="固定分镜数，1 到 100。也可用环境变量 DEEPSEEK_NODE_COUNT",
     )
     return parser.parse_args(argv)
 

@@ -53,7 +53,7 @@ class SnapshotApp(tk.Tk):
             )
         except ValueError:
             saved_count = core.DEFAULT_NODE_COUNT
-        self.node_count_var = tk.StringVar(value=str(saved_count))
+        self._saved_node_count = str(saved_count)
         self.show_key = False
         self._build()
         self._center_window(760, 700)
@@ -131,15 +131,16 @@ class SnapshotApp(tk.Tk):
         ).pack(side=tk.LEFT, padx=(16, 0))
 
         ttk.Label(form, text="分镜数").grid(row=6, column=0, sticky=tk.W, pady=6)
-        self.node_count_combo = ttk.Combobox(
-            form,
-            textvariable=self.node_count_var,
-            values=core.node_count_choices(),
-            state="readonly",
-            width=8,
+        count_row = ttk.Frame(form)
+        count_row.grid(row=6, column=1, columnspan=2, sticky=tk.W, pady=6)
+        self.node_count = ttk.Entry(count_row, width=8)
+        self.node_count.insert(0, self._saved_node_count)
+        self.node_count.pack(side=tk.LEFT)
+        ttk.Label(count_row, text=f"正整数，{core.MIN_NODE_COUNT} 到 {core.MAX_NODE_COUNT}").pack(
+            side=tk.LEFT, padx=(8, 0)
         )
-        self.node_count_combo.grid(row=6, column=1, sticky=tk.W, pady=6)
-        self.node_count_combo.bind("<<ComboboxSelected>>", lambda _event: self._persist())
+        self.node_count.bind("<FocusOut>", lambda _event: self._persist())
+        self.node_count.bind("<Return>", lambda _event: self._persist())
 
         actions = ttk.Frame(root)
         actions.pack(fill=tk.X, pady=(16, 8))
@@ -168,7 +169,7 @@ class SnapshotApp(tk.Tk):
             "1. 填写 API 地址和 Key\n"
             "2. 点「获取模型」后选择模型\n"
             "3. 选择提示词类型：Danbooru 或 自然语言\n"
-            "4. 下拉选择分镜数（10 到 20，生成固定数量）\n"
+            f"4. 填写分镜数（{core.MIN_NODE_COUNT} 到 {core.MAX_NODE_COUNT}，生成固定数量）\n"
             "5. 选择 txt 小说，点「开始生成」\n"
             "6. 完成后会自动打开生成的 md，也可点「打开文件所在目录」\n",
         )
@@ -218,7 +219,7 @@ class SnapshotApp(tk.Tk):
             "model": self.model_var.get().strip(),
             "novel_path": self.novel_path.get().strip(),
             "prompt_style": self.prompt_style_var.get().strip(),
-            "node_count": self.node_count_var.get().strip(),
+            "node_count": self.node_count.get().strip(),
             "models": list(self.model_combo["values"] or []),
         }
 

@@ -36,8 +36,8 @@ DEFAULT_API_URL = "https://api.deepseek.com"
 DEFAULT_MODEL = "deepseek-v4-pro"
 DEFAULT_MAX_TOKENS = 16384
 DEFAULT_NOVEL_MAX_CHARS = 20000
-MIN_NODE_COUNT = 10
-MAX_NODE_COUNT = 20
+MIN_NODE_COUNT = 1
+MAX_NODE_COUNT = 100
 DEFAULT_NODE_COUNT = 12
 NODE_COUNT_PLACEHOLDER = "{{NODE_COUNT}}"
 _PROMPT_STYLE_ALIASES = {
@@ -186,10 +186,6 @@ def normalize_node_count(raw: object) -> int:
             f"分镜数必须是 {MIN_NODE_COUNT} 到 {MAX_NODE_COUNT} 的整数"
         )
     return value
-
-
-def node_count_choices() -> list[str]:
-    return [str(n) for n in range(MIN_NODE_COUNT, MAX_NODE_COUNT + 1)]
 
 
 def render_system_prompt(text: str, node_count: int) -> str:
