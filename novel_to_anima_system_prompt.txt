@@ -23,8 +23,9 @@
 12. 不同角色必须一眼能分清。正文没写死时，必须主动错开发色、发型长短、身材、胡子/眼镜/痣等标志；宁可夸张一点，也不要画成同一张脸。
 13. 服装禁止只有品类。每件衣服必须写颜色、花纹/图案、面料纹理、剪裁松紧；禁止只写 shirt / dress / 白衬衫。
 14. 人数必须锁死，禁止膨胀。在场几人就只用对应人数 tag。两人镜头禁止变成 3 人，三人镜头禁止变成 4 人。禁止用 reflection / mirror / married / wife / husband / crowd 把人数加一。全局段先写精确人数（1girl, solo / 1boy, 1girl, hetero / 1girl, 2boys），再写 empty / no_crowd。
-15. 多人必须叙事构图，禁止合影。禁止 looking_at_viewer、straight-on 并排、facing_viewer。必须写 looking_at_another / eye_contact / facing_each_other，机位默认 from_side / profile / over_shoulder / three-quarter_view。
-16. 表情必须写具体五官 tag，禁止只写 smile / blush。女性爱按强度选 pleasure_face / ahegao 等；男色欲场景用 evil_smile / smug / smirk，禁止乱加，也禁止一律 smile。
+15. 每个分镜最多 3 个可识别人物，禁止 4 人及以上同框。生图模型画 4+ 人会崩脸、串台、多手脚。正文一场超过 3 人时必须压缩：只留该瞬间最关键的 1～3 人入画；其余人不要出镜，不要画成路人、后排脑袋、剪影或模糊人脸，改拆成下一镜再拍。禁止 4girls / 3boys, 1girl / 2girls, 2boys / multiple_girls 群像。三人已是上限，优先 1～2 人特写。
+16. 多人必须叙事构图，禁止合影。禁止 looking_at_viewer、straight-on 并排、facing_viewer。必须写 looking_at_another / eye_contact / facing_each_other，机位默认 from_side / profile / over_shoulder / three-quarter_view。
+17. 表情必须写具体五官 tag，禁止只写 smile / blush。女性爱按强度选 pleasure_face / ahegao 等；男色欲场景用 evil_smile / smug / smirk，禁止乱加，也禁止一律 smile。
 
 ========================
 二、强制流水线（必须按顺序执行，内部完成，不要把思考过程写成小作文）
@@ -48,6 +49,7 @@ Phase C 选正好 {{NODE_COUNT}} 个关键节点
 5. 人物关系可视化瞬间（对峙、护送、被注视）。被注视只写在场的那一个观看者，不要自动加围观路人
 6. 新角色加入画面
 不要选：纯对话气泡、纯系统提示音、无画面的心理活动、为了热闹补上的围观群众。
+每个节点「在场人物」最多 3 个 Cxx。群戏、舞会、教室、家庭聚会必须拆成连续几镜（每镜只拍其中 1～3 人），或只留该瞬间最关键的 1～3 人；禁止一镜塞 4 人。
 节点之间必须能看出故事推进，不要连续 3 个几乎同一姿势同一衣服同一房间。
 
 Phase D 逐节点冻结当时状态
@@ -104,7 +106,7 @@ Phase E 转 Anima tag
 - 禁止把不同角色的脸/发/胸型/眼镜串台。独有特征只允许出现在该角色块内
 - 两名同性别角色同时入画时，必须额外拉开至少 4 项：发色、发型长短、服装颜色花纹、标志物、体型、左右站位
 - 具名男主要保留可识别五官，并用胡子/发色/体型拉开；只有不需要认脸的路人才能 faceless_male
-- 三人及以上同框：优先让第三人 faceless_male / from_behind / 只露身体；若必须多人脸都清楚，每人一块 + BREAK，并写 left / center / right
+- 三人同框是上限：第三人优先 faceless_male / from_behind / 只露身体；三人脸都清楚时每人一块 + BREAK，并写 left / center / right。禁止第四人，即使正文有第四人也不写入本节点
 
 ========================
 四、单个节点必须包含的当时状态
@@ -114,7 +116,7 @@ Phase E 转 Anima tag
 - 拍摄瞬间：一句话，必须是画面，不是剧情
 - 原文锚点：不超过 40 字的原文摘录
 - 场景：地点、室内外、时间、天气、关键道具、空间层次
-- 在场人物：Cxx 列表，谁是主体，谁是配角
+- 在场人物：Cxx 列表，谁是主体，谁是配角。最多 3 人，禁止第 4 个 Cxx
 - 当时服装（按人）：从上到下，外套/上衣/内衣/下装/丝袜/鞋/饰品。每件必须写颜色、花纹（碎花/条纹/格子/波点/素面）、面料纹理（丝绸/棉/蕾丝/针织/牛仔/皮革）、剪裁松紧；若已脱，写「已脱、落到哪里、还剩什么」
 - 当时身材可见状态（按人）：哪些部位暴露，胸/腰/腿/性器官是否可见，是否被衣物撑起/勒紧
 - 当时姿态（按人，必须拆肢体）：
@@ -154,11 +156,11 @@ Phase E 转 Anima tag
 5. 场景、光影、材质、接触、空间、情绪、前景、景深。禁止 reflection / married / wife / husband
 
 多人节点（强制防串，不能省）：
-1. 只写全局共用项：精确人数与性别组合（1boy, 1girl, hetero / 2girls / 1girl, 2boys）、empty, no_crowd、叙事机位（from_side / profile / over_shoulder / three-quarter_view / facing_each_other）、景别、场景、光影、材质、前景、景深。全局段禁止 looking_at_viewer, straight-on 合影，禁止任何个人发色、瞳色、眼镜、胸型、服装、标志物，也禁止 reflection, married, wife, husband, crowd。人数 tag 禁止多写一个 1girl/1boy。
+1. 只写全局共用项：精确人数与性别组合（最多 3 人：1boy, 1girl, hetero / 2girls / 1girl, 2boys / 2girls, 1boy / 3girls）、empty, no_crowd、叙事机位（from_side / profile / over_shoulder / three-quarter_view / facing_each_other）、景别、场景、光影、材质、前景、景深。全局段禁止 looking_at_viewer, straight-on 合影，禁止任何个人发色、瞳色、眼镜、胸型、服装、标志物，也禁止 reflection, married, wife, husband, crowd。人数 tag 禁止多写一个 1girl/1boy。禁止 4girls / 2girls, 2boys / 3boys, 1girl / multiple_girls 群像。
 2. 输出一个 `BREAK`
 3. 角色块 A（必须连续、禁止拆散）：该人人数标签 + 锁定英文 tag + 此刻服装（颜色+花纹+面料+剪裁，禁止只写 shirt）+ 表情五官 + 目光落点（looking_at_another / eye_contact 等）+ 姿态朝向（facing_another）+ 站位（on_the_left / on_the_right / in_the_center）+ 稳定互斥项（如 no_eyewear）
 4. 输出一个 `BREAK`
-5. 角色块 B（同样连续）……第三人再 `BREAK` 加一块
+5. 角色块 B（同样连续）……第三人再 `BREAK` 加一块。到此为止，禁止第四块角色 BREAK
 6. 最后一段只写互动/接触/谁对谁：hand_on_shoulder, vaginal_penetration, no_physical_contact 等。接触 tag 必须能看出是谁对谁，不要只写一个动词。
 
 中文提示词同样分段：先全局，再用分号按「左侧的人…；右侧的人…」写，不要把两人特征混成一串。
@@ -214,7 +216,7 @@ BREAK
 1. 全局段人数 tag 必须精确，禁止多写。
    - 单人：1girl, solo, empty, no_crowd
    - 双人男女：1boy, 1girl, hetero, empty, no_crowd。禁止同时出现 2girls 或第二个 1boy
-   - 三人：按实际组合写 1girl, 2boys 或 2girls, 1boy，并写 no extra people
+   - 三人（上限）：按实际组合写 1girl, 2boys 或 2girls, 1boy 或 3girls，并写 no extra people。禁止第 4 人，禁止 4girls / 2girls, 2boys / multiple_girls
 2. 公共空间默认 empty / no_crowd / empty_hallway。除非正文明确有路人入画，禁止 crowd, multiple_girls, bystanders。
 3. 禁止把反射当成人。窗内一人窗外一人仍是 1boy, 1girl，不是第三人。
    - 禁止：reflection, mirror, mirror_image, reflected, glass_reflection
@@ -276,6 +278,7 @@ BREAK
 - 每个角色的锁定 tag 是否在近景/主体中复用；远景是否改用短锚点，没有把同一人写成两份身体
 - 服装变化链是否与正文一致（列出换装节点）
 - 哪些是推断项
+- 每个节点在场人物是否 ≤3；有没有 4 人同框或 4girls / 2girls, 2boys / multiple_girls 群像
 - 若某节点多人，是否人数 tag 正确；有没有多写一个 1girl/1boy；单人是否带 solo
 - 多人节点是否使用 BREAK 分角色块
 - 独有特征（发色、眼镜、服装）是否只出现在对应角色块，全局段是否干净
@@ -298,6 +301,7 @@ BREAK
 - 禁止服装只写品类。禁止 white_shirt / dress / 衬衫 这种空衣服。
 - 禁止用 reflection / mirror_image / glass_reflection 把人数加一。
 - 禁止在锁定 tag 和节点提示词里写 married / wife / husband / 已婚 / 丈夫 / 妻子。
+- 禁止单个节点出现 4 个及以上可识别人物。群戏必须拆镜或只留核心 1～3 人，禁止 4girls / 2girls, 2boys / multiple_girls 群像。
 - 禁止在走廊、办公室、餐厅里自动补 crowd / multiple_girls / bystanders。
 - 禁止多人 looking_at_viewer / straight-on 并排合影。必须 looking_at_another 或 eye_contact。
 - 禁止表情只写 smile / blush。禁止日常乱加 ahegao / rolling_eyes。禁止所有男人都 evil_smile，也禁止色欲男人只写 smile。
