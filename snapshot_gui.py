@@ -129,6 +129,13 @@ class SnapshotApp(tk.Tk):
             value=core.PROMPT_STYLE_NATURAL,
             command=self._persist,
         ).pack(side=tk.LEFT, padx=(16, 0))
+        ttk.Radiobutton(
+            style_row,
+            text="Krea2",
+            variable=self.prompt_style_var,
+            value=core.PROMPT_STYLE_KREA2,
+            command=self._persist,
+        ).pack(side=tk.LEFT, padx=(16, 0))
 
         ttk.Label(form, text="分镜数").grid(row=6, column=0, sticky=tk.W, pady=6)
         count_row = ttk.Frame(form)
@@ -168,7 +175,7 @@ class SnapshotApp(tk.Tk):
             tk.END,
             "1. 填写 API 地址和 Key\n"
             "2. 点「获取模型」后选择模型\n"
-            "3. 选择提示词类型：Danbooru 或 自然语言\n"
+            "3. 选择提示词类型：Danbooru（Anima tag）、自然语言、或 Krea2（二次元分镜简报，贴英文）\n"
             f"4. 填写分镜数（{core.MIN_NODE_COUNT} 到 {core.MAX_NODE_COUNT}，生成固定数量）\n"
             "5. 选择 txt 小说，点「开始生成」\n"
             "6. 完成后会自动打开生成的 md，也可点「打开文件所在目录」\n",

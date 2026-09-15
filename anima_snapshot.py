@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""小说节点快照：读取 txt，调用 OpenAI 兼容接口生成 Anima 提示词。"""
+"""小说节点快照：读取 txt，调用 OpenAI 兼容接口生成 Anima / 自然语言 / Krea2 提示词。"""
 
 from __future__ import annotations
 
@@ -17,14 +17,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 PROMPT_STYLE_DANBOORU = "danbooru"
 PROMPT_STYLE_NATURAL = "natural"
+PROMPT_STYLE_KREA2 = "krea2"
 DEFAULT_PROMPT_STYLE = PROMPT_STYLE_DANBOORU
 PROMPT_FILES = {
     PROMPT_STYLE_DANBOORU: ROOT / "novel_to_anima_system_prompt.txt",
     PROMPT_STYLE_NATURAL: ROOT / "novel_to_nl_system_prompt.txt",
+    PROMPT_STYLE_KREA2: ROOT / "novel_to_krea2_system_prompt.txt",
 }
 PROMPT_STYLE_LABELS = {
     PROMPT_STYLE_DANBOORU: "Danbooru",
     PROMPT_STYLE_NATURAL: "自然语言",
+    PROMPT_STYLE_KREA2: "Krea2",
 }
 PROMPT_PATH = PROMPT_FILES[PROMPT_STYLE_DANBOORU]
 DEFAULT_NOVEL_PATH = ROOT / "samples" / "snapshot_test_excerpt.txt"
@@ -49,6 +52,11 @@ _PROMPT_STYLE_ALIASES = {
     "nl": PROMPT_STYLE_NATURAL,
     "natural_language": PROMPT_STYLE_NATURAL,
     "自然语言": PROMPT_STYLE_NATURAL,
+    "krea2": PROMPT_STYLE_KREA2,
+    "krea": PROMPT_STYLE_KREA2,
+    "krea_2": PROMPT_STYLE_KREA2,
+    "krea-2": PROMPT_STYLE_KREA2,
+    "k2": PROMPT_STYLE_KREA2,
 }
 
 
@@ -163,7 +171,7 @@ def normalize_prompt_style(raw: str | None) -> str:
     text = (raw or DEFAULT_PROMPT_STYLE).strip().lower()
     style = _PROMPT_STYLE_ALIASES.get(text)
     if style is None:
-        raise ValueError(f"不支持的提示词类型: {raw}（可选 danbooru / natural）")
+        raise ValueError(f"不支持的提示词类型: {raw}（可选 danbooru / natural / krea2）")
     return style
 
 
@@ -214,7 +222,17 @@ def build_user_prompt(
 ) -> str:
     style = normalize_prompt_style(prompt_style)
     count = normalize_node_count(node_count)
-    if style == PROMPT_STYLE_NATURAL:
+    if style == PROMPT_STYLE_KREA2:
+        prompt_rule = (
+            "每个节点的英文提示词必须是可直接贴进 Krea 2 的导演简报，80 到 160 词。"
+            "必须先写全书风格锁定句（2D anime still frame, modern TV anime cel, visible linework, cel-shaded 等），再写机位/人数，再按人写锁定外貌+此刻服装动作，再写场景、主光、赛璐璐阴影。"
+            "禁止 photoreal / live-action / cinematic still / 35mm / film grain。禁止 Danbooru tag、snake_case、BREAK、1girl、solo。中文提示词信息对齐，供阅读；出图只贴英文。"
+            "人数用肯定句：frame holds only N people。不要堆 no crowd / no bystanders 否定清单。"
+            "禁止用玻璃倒影、married/丈夫/妻子、走廊路人把人数加一。"
+            "多人必须叙事构图：过肩/侧面/面对面，写清谁看谁，禁止并排看镜头，禁止 looking at the camera。"
+            "表情写五官动作；女性爱按强度用愉悦/高潮；男色欲用邪笑/得意/坏笑，不要乱加。"
+        )
+    elif style == PROMPT_STYLE_NATURAL:
         prompt_rule = (
             "每个节点的中文提示词和英文提示词必须是完整自然语言画面描述，"
             "可直接用于自然语言文生图。禁止输出 Danbooru tag、snake_case、逗号堆砌标签。"
@@ -294,11 +312,15 @@ def evaluate(
         f"禁用质量套话: {quality_hits or '无'}",
     ]
     structure_ok = has_bible and found_count == expected and not quality_hits
-    if style == PROMPT_STYLE_NATURAL:
+    if style in (PROMPT_STYLE_NATURAL, PROMPT_STYLE_KREA2):
         lines.append(f"Danbooru tag 残留: {len(tag_hits)}")
         ok = structure_ok
         if len(tag_hits) >= 8:
-            lines.append("警告: 正文里仍出现较多 Danbooru tag，请核对是否按自然语言输出")
+            target = "Krea2 导演简报" if style == PROMPT_STYLE_KREA2 else "自然语言"
+            lines.append(f"警告: 正文里仍出现较多 Danbooru tag，请核对是否按{target}输出")
+            ok = False
+        if style == PROMPT_STYLE_KREA2 and "全书视觉锁定" not in content:
+            lines.append("警告: 未找到全书视觉锁定，Krea2 容易漂风格")
             ok = False
     else:
         lines.append(f"关键 Anima tag 命中: {len(tag_hits)}")

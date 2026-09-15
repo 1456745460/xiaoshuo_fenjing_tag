@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""命令行：读取 txt 小说，调用接口生成 Anima 节点快照提示词。
+"""命令行：读取 txt 小说，调用接口生成 Anima / 自然语言 / Krea2 节点快照提示词。
 
 用法:
   python3 test_deepseek_novel_snapshot.py
@@ -18,7 +18,7 @@ import anima_snapshot as core
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="读取 txt 小说，调用接口生成 Anima 节点快照提示词。"
+        description="读取 txt 小说，调用接口生成 Anima / 自然语言 / Krea2 节点快照提示词。"
     )
     parser.add_argument(
         "novel",
@@ -28,7 +28,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--style",
         default=os.environ.get("DEEPSEEK_PROMPT_STYLE", core.DEFAULT_PROMPT_STYLE),
-        help="提示词类型：danbooru 或 natural（自然语言）。也可用环境变量 DEEPSEEK_PROMPT_STYLE",
+        help="提示词类型：danbooru、natural（自然语言）或 krea2。也可用环境变量 DEEPSEEK_PROMPT_STYLE",
     )
     parser.add_argument(
         "--nodes",
