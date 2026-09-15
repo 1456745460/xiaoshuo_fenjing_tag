@@ -152,7 +152,7 @@ Phase F 转 Krea 2 动漫分镜简报
 - 当时身材可见状态（按人）
 - 当时姿态（按人，必须拆肢体）：头/颈、肩、手臂、手、躯干、胯、腿、脚；动作；接触
 - 表情与目光：每人必须写目光落点，禁止直视镜头。表情写五官动作
-- 镜头：人数、机位、景别、角度。多人默认侧面、过肩、四分之三侧面、面对面。先写「画面里只有 N 个人」。不要写 35mm 胶片焦距。
+- 镜头：人数、机位、景别、角度。多人默认侧面、过肩、四分之三侧面、面对面。先写「画面里只有 N 个人」（N≤3）。不要写 35mm 胶片焦距。
 - 防串站位：谁在左/中/右、谁面向谁；独有特征分别属于谁
 - 光影/材质：主光从哪来、赛璐璐阴影怎么切、手绘背景。玻璃只写 window glare / window frame，禁止人脸倒影。禁止 film grain / photoreal lighting
 - 中文提示词：（一段连续中文动漫分镜简报，不要逗号标签）
@@ -237,7 +237,7 @@ Exactly two people only, two women, no third person, no crowd, no bystanders, no
 - 面料：丝绸、棉、亚麻、蕾丝、缎面、雪纺、针织、牛仔、皮革、羊毛、薄纱
 - 颜色要具体：米白、奶白、藏青、酒红、橄榄、炭灰、浅粉
 - 体位用动词写：missionary 可写 he pins her on the bed, hips between her open thighs；后入写 he takes her from behind, her chest to the mattress
-- 人数：frame holds only one woman / only two people, one man and one woman
+- 人数：frame holds only one woman / only two people, one man and one woman / only three people（三人是上限，禁止 four people）
 - 男性辨识：stubble, goatee, beard, adam's apple, undercut
 - 叙事机位：side angle, over-the-shoulder, three-quarter profile, facing each other
 - 目光：eye contact with the other person, looking at her chest, looking down at where their bodies meet, eyes closed。禁止 looking at the camera / looking at the viewer

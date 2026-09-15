@@ -124,7 +124,7 @@ Phase E 转 Anima tag
   动作：站/坐/走/躺/跪/抱/插入等
   接触：谁碰谁、手在哪、身体重叠
 - 表情与目光：每人必须有目光落点 tag（looking_at_another / eye_contact / looking_down / looking_at_another's_body / closed_eyes），禁止 looking_at_viewer。表情写五官 tag，禁止只写 smile / blush
-- 镜头：人数构图、机位、景别、角度。多人默认 from_side, profile, over_shoulder, three-quarter_view, facing_each_other，禁止 straight-on 并排合影。人数 tag 必须等于「在场人物」列表
+- 镜头：人数构图、机位、景别、角度。多人默认 from_side, profile, over_shoulder, three-quarter_view, facing_each_other，禁止 straight-on 并排合影。人数 tag 必须等于「在场人物」列表，且 ≤3
 - 防串站位：谁在左/中/右、谁在前/后；谁面向谁；独有特征分别属于谁（眼镜、发色、服装）
 - 光影/材质/前景：玻璃/镜子只写 window, backlight, window_frame, glass, sun_glare，禁止 reflection / mirror_image / reflected。公共场所除非正文有路人入画，否则写 empty / no_crowd
 - 中文提示词：（一行，逗号分隔；多人必须按角色用分号分段）
@@ -199,7 +199,7 @@ BREAK
 - 豪车 sports_car, parking_lot
 - 别墅卧室 bedroom, large_bed, luxury_interior
 - 体位 missionary / doggy_style / cowgirl / against_wall 等
-- 人数 1girl, 1boy, hetero, faceless_male（仅当男方不需要可识别脸）。单人必须 solo；双人禁止再加 1girl/1boy；公共场景补 empty, no_crowd
+- 人数 1girl, 1boy, hetero, faceless_male（仅当男方不需要可识别脸）。单人必须 solo；双人禁止再加 1girl/1boy；每镜最多 3 人（1girl, 2boys / 2girls, 1boy / 3girls）；禁止 4girls / 2girls, 2boys / multiple_girls；公共场景补 empty, no_crowd
 - 男性辨识 stubble, goatee, beard, adam's_apple, short_hair, undercut
 - 窗镜光影 window, backlight, window_frame, glass, sun_glare。禁止 reflection, mirror_image, reflected, glass_reflection
 - 少妇外形 hair_bun, mature_female。禁止 married, wife, husband, newlywed
