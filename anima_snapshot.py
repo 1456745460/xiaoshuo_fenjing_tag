@@ -11,6 +11,7 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -30,9 +31,12 @@ PROMPT_STYLE_LABELS = {
     PROMPT_STYLE_KREA2: "Krea2",
 }
 PROMPT_PATH = PROMPT_FILES[PROMPT_STYLE_DANBOORU]
+NL_CHARACTER_PROMPT_PATH = ROOT / "novel_to_nl_character_system_prompt.txt"
+NL_SUMMARY_PROMPT_PATH = ROOT / "novel_to_nl_summary_system_prompt.txt"
 DEFAULT_NOVEL_PATH = ROOT / "samples" / "snapshot_test_excerpt.txt"
 OUTPUT_PATH = ROOT / "test_output_deepseek.md"
 OUTPUT_DIR = ROOT / "outputs"
+INTERMEDIATE_DIR = OUTPUT_DIR / "intermediates"
 TEXT_ENCODINGS = ("utf-8-sig", "utf-8", "gb18030", "gbk")
 SSL_CONTEXT = ssl._create_unverified_context()
 DEFAULT_API_URL = "https://api.deepseek.com"
@@ -196,11 +200,33 @@ def normalize_node_count(raw: object) -> int:
     return value
 
 
-def render_system_prompt(text: str, node_count: int) -> str:
-    count = normalize_node_count(node_count)
+def render_system_prompt(text: str, node_count: int | None = None) -> str:
     if NODE_COUNT_PLACEHOLDER not in text:
-        raise ValueError(f"系统提示词缺少 {NODE_COUNT_PLACEHOLDER} 占位符")
+        return text
+    if node_count is None:
+        raise ValueError(f"系统提示词含 {NODE_COUNT_PLACEHOLDER}，但未提供分镜数")
+    count = normalize_node_count(node_count)
     return text.replace(NODE_COUNT_PLACEHOLDER, str(count))
+
+
+def emit_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
+    if on_progress is not None:
+        on_progress(message)
+
+
+def merge_usage(*usages: dict) -> dict:
+    merged: dict[str, int] = {}
+    for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+        total = 0
+        found = False
+        for usage in usages:
+            value = (usage or {}).get(key)
+            if isinstance(value, int):
+                total += value
+                found = True
+        if found:
+            merged[key] = total
+    return merged
 
 
 def clip_novel(text: str, max_chars: int = DEFAULT_NOVEL_MAX_CHARS) -> tuple[str, bool]:
@@ -271,6 +297,72 @@ def build_user_prompt(
     )
 
 
+def build_nl_character_user_prompt(novel: str, novel_name: str) -> str:
+    return (
+        "请根据下面这篇 txt 小说正文，只产出「角色一致性档案」。\n"
+        "不要写节点，不要写中英文提示词，不要写剧情摘要。不要寒暄。\n\n"
+        f"小说文件名：{novel_name}\n\n"
+        "<novel>\n"
+        f"{novel}\n"
+        "</novel>"
+    )
+
+
+def build_nl_summary_user_prompt(novel: str, novel_name: str) -> str:
+    return (
+        "请根据下面这篇 txt 小说正文，写出保留完整故事结构的详细概括。\n"
+        "不要过于精简。严格保留整体故事结构、不同爱情姿势、不同爱情经过。\n"
+        "每一场情爱单独写，每换一种姿势就分条写，禁止合并成「两人做爱」。\n"
+        "不要写角色外貌档案，不要写分镜提示词。不要寒暄。\n\n"
+        f"小说文件名：{novel_name}\n\n"
+        "<novel>\n"
+        f"{novel}\n"
+        "</novel>"
+    )
+
+
+def build_nl_tag_user_prompt(
+    character_bible: str,
+    summary: str,
+    novel_name: str,
+    node_count: int,
+) -> str:
+    count = normalize_node_count(node_count)
+    prompt_rule = (
+        "每个节点的中文提示词和英文提示词必须是完整自然语言画面描述，"
+        "可直接用于自然语言文生图。禁止输出 Danbooru tag、snake_case、逗号堆砌标签。"
+        "多人同框必须一人一句，主语带外貌锚点，独有特征禁止写成全画面清单。"
+        "段首先锁人数：画面里只有 N 个人（N≤3）。每个分镜最多 3 个可识别人物；"
+        "概括超过 3 人必须拆镜或只留核心 1～3 人，禁止 4 人同框。"
+        "禁止用玻璃倒影、married/丈夫/妻子、走廊路人把两人写成三人、三人写成四人。"
+        "多人必须叙事构图：面对面或侧面相对、写清谁看谁，禁止并排看镜头合影，禁止直视镜头。"
+        "表情写五官动作，禁止只写微笑/脸红；女性爱按强度用愉悦表情/高潮脸/阿嘿颜等，"
+        "男色欲用邪笑/得意/坏笑，不要乱加。"
+    )
+    return (
+        "请根据下面已经完成的「角色一致性档案」和「小说内容概括」，严格执行系统提示词。\n"
+        f"本次必须输出正好 {count} 个关键节点，不多不少。状态表写要点即可，"
+        f"但{prompt_rule}\n"
+        "不要再读原文，不要重写人物外貌。锁定外貌句必须原样粘贴。\n"
+        "不要再输出角色一致性档案，不要再输出小说概括。直接从节点目录写起。\n"
+        "概括里的不同爱情姿势、不同爱情经过必须尽量用不同节点覆盖，禁止合并省略。\n"
+        "防串台：禁止把发色、眼镜、服装混成一袋；一人戴眼镜则另一人必须明确不戴。\n"
+        "防人数膨胀：每个分镜最多 3 个可识别人物，禁止 4 人同框；在场几人就只写几人；"
+        "玻璃/镜子只写光斑不写人物倒影；锁定外貌禁止 married/妻子/丈夫；走廊办公室默认空场。\n"
+        "防合影：多人禁止看镜头，必须对视或看对方身体，机位用侧面/过肩/面对面，不要正面并排。\n"
+        "表情：写五官动作；女性爱按强度选愉悦/高潮/阿嘿颜；男色欲用邪笑/得意/坏笑，禁止一律微笑，禁止乱加。\n"
+        "服装必须写颜色、花纹、面料纹理、剪裁，禁止只写衬衫/裙子/white_shirt。\n"
+        "以下材料可能已经过人工修改，一律以本次给定文本为准，不要用旧版记忆。\n\n"
+        f"小说文件名：{novel_name}\n\n"
+        "<character_bible>\n"
+        f"{character_bible.strip()}\n"
+        "</character_bible>\n\n"
+        "<novel_summary>\n"
+        f"{summary.strip()}\n"
+        "</novel_summary>"
+    )
+
+
 def extract_content(api_result: dict) -> str:
     choices = api_result.get("choices") or []
     if not choices:
@@ -329,6 +421,30 @@ def evaluate(
         lines.append(f"关键 Anima tag 命中: {len(tag_hits)}")
         ok = structure_ok and len(tag_hits) >= 8
     lines.append(f"结构校验: {'通过' if ok else '未完全通过，请看正文'}")
+    return lines
+
+
+def evaluate_nl_pipeline(
+    character_bible: str,
+    summary: str,
+    nodes: str,
+    node_count: int,
+) -> list[str]:
+    has_bible = "角色一致性档案" in character_bible or "锁定中文外貌" in character_bible
+    has_summary = "小说内容概括" in summary or "情爱场次" in summary or "故事骨架" in summary
+    lines = [
+        "流水线: 自然语言三步独立对话",
+        f"第一步人物一致性: {'有' if has_bible else '缺失'}",
+        f"第二步小说概括: {'有' if has_summary else '缺失'}",
+    ]
+    assembled = f"{character_bible.strip()}\n\n{nodes.strip()}"
+    lines.extend(evaluate(assembled, PROMPT_STYLE_NATURAL, node_count))
+    if not has_summary:
+        lines.append("警告: 第二步概括缺少标题或情爱场次，后续分镜可能丢姿势")
+        if lines and lines[-2].startswith("结构校验:"):
+            lines[-2] = "结构校验: 未完全通过，请看正文"
+        elif lines[-1].startswith("结构校验:"):
+            lines[-1] = "结构校验: 未完全通过，请看正文"
     return lines
 
 
@@ -393,6 +509,7 @@ def write_output(
     output_path: Path | None = None,
     prompt_style: str = DEFAULT_PROMPT_STYLE,
     node_count: int = DEFAULT_NODE_COUNT,
+    extra_header: list[str] | None = None,
 ) -> Path:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -406,6 +523,7 @@ def write_output(
         f"- 小说: `{novel_path}`",
         f"- 提示词类型: `{PROMPT_STYLE_LABELS[style]}` ({style})",
         f"- 分镜数: `{count}`",
+        *(extra_header or []),
         f"- prompt_tokens: {usage.get('prompt_tokens', '未知')}",
         f"- completion_tokens: {usage.get('completion_tokens', '未知')}",
         f"- total_tokens: {usage.get('total_tokens', '未知')}",
@@ -424,6 +542,238 @@ def write_output(
     return target
 
 
+def nl_draft_paths(novel_path: Path) -> tuple[Path, Path]:
+    INTERMEDIATE_DIR.mkdir(parents=True, exist_ok=True)
+    stem = novel_path.stem
+    return (
+        INTERMEDIATE_DIR / f"{stem}_character.md",
+        INTERMEDIATE_DIR / f"{stem}_summary.md",
+    )
+
+
+def write_nl_character_draft(novel_path: Path, character_bible: str) -> Path:
+    character_path, _ = nl_draft_paths(novel_path)
+    character_path.write_text(character_bible.strip() + "\n", encoding="utf-8")
+    return character_path
+
+
+def write_nl_summary_draft(novel_path: Path, summary: str) -> Path:
+    _, summary_path = nl_draft_paths(novel_path)
+    summary_path.write_text(summary.strip() + "\n", encoding="utf-8")
+    return summary_path
+
+
+def write_nl_drafts(
+    novel_path: Path,
+    character_bible: str,
+    summary: str,
+) -> tuple[Path, Path]:
+    return (
+        write_nl_character_draft(novel_path, character_bible),
+        write_nl_summary_draft(novel_path, summary),
+    )
+
+
+def load_nl_drafts(novel_path: Path) -> tuple[str, str]:
+    character_path, summary_path = nl_draft_paths(novel_path)
+    if not character_path.exists():
+        raise FileNotFoundError(f"找不到人物一致性稿: {character_path}")
+    if not summary_path.exists():
+        raise FileNotFoundError(f"找不到故事概括稿: {summary_path}")
+    character_bible = load_text(character_path).strip()
+    summary = load_text(summary_path).strip()
+    if not character_bible:
+        raise ValueError(f"人物一致性稿是空的: {character_path}")
+    if not summary:
+        raise ValueError(f"故事概括稿是空的: {summary_path}")
+    return character_bible, summary
+
+
+def run_chat_step(
+    *,
+    step_name: str,
+    api_url: str,
+    api_key: str,
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int,
+    on_progress: Callable[[str], None] | None = None,
+) -> tuple[str, dict]:
+    emit_progress(on_progress, step_name)
+    result = chat_completion(
+        api_url=api_url,
+        api_key=api_key,
+        model=model,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        max_tokens=max_tokens,
+    )
+    content = extract_content(result)
+    if not content.strip():
+        raise RuntimeError(f"{step_name} 返回空内容")
+    return content, result.get("usage") or {}
+
+
+def generate_nl_tag_from_materials(
+    *,
+    novel_path: Path,
+    character_bible: str,
+    summary: str,
+    api_url: str,
+    api_key: str,
+    model: str,
+    max_tokens: int,
+    node_count: int,
+    on_progress: Callable[[str], None] | None = None,
+    pipeline_label: str = "自然语言第三步（按当前人物一致性与概括出 TAG）",
+    prior_usages: list[dict] | None = None,
+    truncated: bool = False,
+    novel_chars: int = 0,
+    extra_system_chars: int = 0,
+) -> dict:
+    bible = character_bible.strip()
+    plot = summary.strip()
+    if not bible:
+        raise ValueError("人物一致性不能为空")
+    if not plot:
+        raise ValueError("故事概括不能为空")
+    count = normalize_node_count(node_count)
+    tag_system = render_system_prompt(load_text(prompt_path_for(PROMPT_STYLE_NATURAL)), count)
+    character_path, summary_path = write_nl_drafts(novel_path, bible, plot)
+    nodes, usage_tag = run_chat_step(
+        step_name="根据当前人物一致性和故事概括出 TAG（新对话）",
+        api_url=api_url,
+        api_key=api_key,
+        model=model,
+        system_prompt=tag_system,
+        user_prompt=build_nl_tag_user_prompt(bible, plot, novel_path.name, count),
+        max_tokens=max_tokens,
+        on_progress=on_progress,
+    )
+    usages = list(prior_usages or []) + [usage_tag]
+    usage = merge_usage(*usages)
+    content = f"{bible}\n\n{plot}\n\n{nodes.strip()}"
+    report = evaluate_nl_pipeline(bible, plot, nodes, count)
+    extra_header = [
+        f"- 流水线: `{pipeline_label}`",
+        f"- 人物一致性稿: `{character_path}`",
+        f"- 故事概括稿: `{summary_path}`",
+    ]
+    if prior_usages:
+        for index, step_usage in enumerate(prior_usages, start=1):
+            extra_header.append(
+                f"- 第{index}步 prompt/completion: "
+                f"{step_usage.get('prompt_tokens', '未知')} / "
+                f"{step_usage.get('completion_tokens', '未知')}"
+            )
+        extra_header.append(
+            f"- 第三步 prompt/completion: "
+            f"{usage_tag.get('prompt_tokens', '未知')} / "
+            f"{usage_tag.get('completion_tokens', '未知')}"
+        )
+    else:
+        extra_header.append(
+            f"- 本步 prompt/completion: "
+            f"{usage_tag.get('prompt_tokens', '未知')} / "
+            f"{usage_tag.get('completion_tokens', '未知')}"
+        )
+    emit_progress(on_progress, "正在写入结果文件...")
+    output_path = write_output(
+        content=content,
+        novel_path=novel_path,
+        model=model,
+        usage=usage,
+        report=report,
+        prompt_style=PROMPT_STYLE_NATURAL,
+        node_count=count,
+        extra_header=extra_header,
+    )
+    return {
+        "content": content,
+        "usage": usage,
+        "report": report,
+        "output_path": output_path,
+        "truncated": truncated,
+        "novel_chars": novel_chars,
+        "system_chars": extra_system_chars + len(tag_system),
+        "prompt_style": PROMPT_STYLE_NATURAL,
+        "node_count": count,
+        "pipeline": "nl_step3",
+        "character_bible": bible,
+        "summary": plot,
+        "nodes": nodes,
+        "character_path": character_path,
+        "summary_path": summary_path,
+        "step_usages": usages,
+    }
+
+
+def generate_nl_three_step_snapshot(
+    *,
+    novel_path: Path,
+    novel: str,
+    truncated: bool,
+    api_url: str,
+    api_key: str,
+    model: str,
+    max_tokens: int,
+    node_count: int,
+    on_progress: Callable[[str], None] | None = None,
+    on_step_result: Callable[[str, str], None] | None = None,
+) -> dict:
+    count = normalize_node_count(node_count)
+    character_system = render_system_prompt(load_text(NL_CHARACTER_PROMPT_PATH))
+    summary_system = render_system_prompt(load_text(NL_SUMMARY_PROMPT_PATH))
+
+    character_bible, usage_1 = run_chat_step(
+        step_name="第 1/3 步：从小说提取人物一致性（新对话）",
+        api_url=api_url,
+        api_key=api_key,
+        model=model,
+        system_prompt=character_system,
+        user_prompt=build_nl_character_user_prompt(novel, novel_path.name),
+        max_tokens=max_tokens,
+        on_progress=on_progress,
+    )
+    write_nl_character_draft(novel_path, character_bible)
+    if on_step_result is not None:
+        on_step_result("character", character_bible)
+
+    summary, usage_2 = run_chat_step(
+        step_name="第 2/3 步：概括小说内容（新对话）",
+        api_url=api_url,
+        api_key=api_key,
+        model=model,
+        system_prompt=summary_system,
+        user_prompt=build_nl_summary_user_prompt(novel, novel_path.name),
+        max_tokens=max_tokens,
+        on_progress=on_progress,
+    )
+    write_nl_summary_draft(novel_path, summary)
+    if on_step_result is not None:
+        on_step_result("summary", summary)
+
+    result = generate_nl_tag_from_materials(
+        novel_path=novel_path,
+        character_bible=character_bible,
+        summary=summary,
+        api_url=api_url,
+        api_key=api_key,
+        model=model,
+        max_tokens=max_tokens,
+        node_count=count,
+        on_progress=on_progress,
+        pipeline_label="自然语言三步独立对话",
+        prior_usages=[usage_1, usage_2],
+        truncated=truncated,
+        novel_chars=len(novel),
+        extra_system_chars=len(character_system) + len(summary_system),
+    )
+    result["pipeline"] = "nl_three_step"
+    return result
+
+
 def generate_snapshot(
     *,
     novel_path: Path,
@@ -434,14 +784,31 @@ def generate_snapshot(
     novel_max_chars: int = DEFAULT_NOVEL_MAX_CHARS,
     prompt_style: str = DEFAULT_PROMPT_STYLE,
     node_count: int = DEFAULT_NODE_COUNT,
+    on_progress: Callable[[str], None] | None = None,
+    on_step_result: Callable[[str, str], None] | None = None,
 ) -> dict:
     style = normalize_prompt_style(prompt_style)
     count = normalize_node_count(node_count)
-    system_prompt = render_system_prompt(load_text(prompt_path_for(style)), count)
     novel, truncated = clip_novel(load_text(novel_path), novel_max_chars)
     if not novel:
         raise ValueError(f"小说文件是空的: {novel_path}")
+    if style == PROMPT_STYLE_NATURAL:
+        return generate_nl_three_step_snapshot(
+            novel_path=novel_path,
+            novel=novel,
+            truncated=truncated,
+            api_url=api_url,
+            api_key=api_key,
+            model=model,
+            max_tokens=max_tokens,
+            node_count=count,
+            on_progress=on_progress,
+            on_step_result=on_step_result,
+        )
+
+    system_prompt = render_system_prompt(load_text(prompt_path_for(style)), count)
     user_prompt = build_user_prompt(novel, novel_path.name, style, count)
+    emit_progress(on_progress, "正在调用接口生成节点...")
     result = chat_completion(
         api_url=api_url,
         api_key=api_key,
@@ -472,6 +839,7 @@ def generate_snapshot(
         "system_chars": len(system_prompt),
         "prompt_style": style,
         "node_count": count,
+        "pipeline": "single",
     }
 
 

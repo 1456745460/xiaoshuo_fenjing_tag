@@ -36,7 +36,7 @@ class SnapshotApp(tk.Tk):
         super().__init__()
         self.withdraw()
         self.title("小说节点快照生成器")
-        self.minsize(680, 580)
+        self.minsize(780, 680)
         self.cfg = load_config()
         self.busy = False
         self.last_output_path: Path | None = None
@@ -56,7 +56,9 @@ class SnapshotApp(tk.Tk):
         self._saved_node_count = str(saved_count)
         self.show_key = False
         self._build()
-        self._center_window(760, 700)
+        self._center_window(920, 820)
+        self._try_load_drafts(silent=True)
+        self._sync_nl_controls()
         self.deiconify()
         self.lift()
         self.focus_force()
@@ -120,21 +122,21 @@ class SnapshotApp(tk.Tk):
             text="Danbooru",
             variable=self.prompt_style_var,
             value=core.PROMPT_STYLE_DANBOORU,
-            command=self._persist,
+            command=self._on_style_change,
         ).pack(side=tk.LEFT)
         ttk.Radiobutton(
             style_row,
             text="自然语言",
             variable=self.prompt_style_var,
             value=core.PROMPT_STYLE_NATURAL,
-            command=self._persist,
+            command=self._on_style_change,
         ).pack(side=tk.LEFT, padx=(16, 0))
         ttk.Radiobutton(
             style_row,
             text="Krea2",
             variable=self.prompt_style_var,
             value=core.PROMPT_STYLE_KREA2,
-            command=self._persist,
+            command=self._on_style_change,
         ).pack(side=tk.LEFT, padx=(16, 0))
 
         ttk.Label(form, text="分镜数").grid(row=6, column=0, sticky=tk.W, pady=6)
@@ -153,6 +155,18 @@ class SnapshotApp(tk.Tk):
         actions.pack(fill=tk.X, pady=(16, 8))
         self.start_btn = ttk.Button(actions, text="开始生成", command=self.start_generate)
         self.start_btn.pack(side=tk.LEFT)
+        self.step3_btn = ttk.Button(
+            actions,
+            text="只跑第三步出 TAG",
+            command=self.start_step3,
+        )
+        self.step3_btn.pack(side=tk.LEFT, padx=(8, 0))
+        self.save_drafts_btn = ttk.Button(
+            actions,
+            text="保存中间稿",
+            command=self.save_drafts,
+        )
+        self.save_drafts_btn.pack(side=tk.LEFT, padx=(8, 0))
         self.open_dir_btn = ttk.Button(
             actions,
             text="打开文件所在目录",
@@ -163,29 +177,52 @@ class SnapshotApp(tk.Tk):
         self.status = ttk.Label(actions, text="就绪")
         self.status.pack(side=tk.LEFT, padx=12)
 
-        ttk.Label(root, text="日志").pack(anchor=tk.W, pady=(8, 4))
-        log_frame = ttk.Frame(root)
-        log_frame.pack(fill=tk.BOTH, expand=True)
-        self.log = tk.Text(log_frame, height=14, wrap=tk.WORD)
-        scroll = ttk.Scrollbar(log_frame, command=self.log.yview)
-        self.log.configure(yscrollcommand=scroll.set)
+        ttk.Label(
+            root,
+            text="自然语言：前两步结果会出现在「人物一致性」「故事概括」页，改完后可只重跑第三步。",
+        ).pack(anchor=tk.W, pady=(0, 4))
+
+        self.notebook = ttk.Notebook(root)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
+
+        log_tab = ttk.Frame(self.notebook, padding=4)
+        self.notebook.add(log_tab, text="日志")
+        self.log = tk.Text(log_tab, height=14, wrap=tk.WORD)
+        log_scroll = ttk.Scrollbar(log_tab, command=self.log.yview)
+        self.log.configure(yscrollcommand=log_scroll.set)
         self.log.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        log_scroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.log.insert(
             tk.END,
             "1. 填写 API 地址和 Key\n"
             "2. 点「获取模型」后选择模型\n"
             "3. 选择提示词类型：Danbooru（Anima tag）、自然语言、或 Krea2（二次元分镜简报，贴英文）\n"
+            "   自然语言会分三次独立 DeepSeek 对话：人物一致性 → 详细概括 → 再出 TAG\n"
             f"4. 填写分镜数（{core.MIN_NODE_COUNT} 到 {core.MAX_NODE_COUNT}，生成固定数量）\n"
             "5. 选择 txt 小说，点「开始生成」\n"
-            "6. 完成后会自动打开生成的 md，也可点「打开文件所在目录」\n",
+            "6. 自然语言生成后，可在「人物一致性」「故事概括」页直接改稿，再点「只跑第三步出 TAG」\n"
+            "7. 完成后会自动打开生成的 md，也可点「打开文件所在目录」\n",
         )
         self.log.configure(state=tk.DISABLED)
+
+        self.character_text = self._make_editor_tab("人物一致性")
+        self.summary_text = self._make_editor_tab("故事概括")
 
         for child in root.winfo_children():
             if isinstance(child, ttk.Frame):
                 child.configure()
         _ = pad
+
+    def _make_editor_tab(self, title: str) -> tk.Text:
+        frame = ttk.Frame(self.notebook, padding=4)
+        self.notebook.add(frame, text=title)
+        text = tk.Text(frame, wrap=tk.WORD, undo=True)
+        scroll = ttk.Scrollbar(frame, command=text.yview)
+        text.configure(yscrollcommand=scroll.set)
+        text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        text.bind("<KeyRelease>", lambda _event: self._sync_nl_controls())
+        return text
 
     def _center_window(self, width: int, height: int) -> None:
         self.update_idletasks()
@@ -206,11 +243,41 @@ class SnapshotApp(tk.Tk):
         self.show_key = not self.show_key
         self.api_key.configure(show="" if self.show_key else "*")
 
+    def _nl_mode(self) -> bool:
+        try:
+            return core.normalize_prompt_style(self.prompt_style_var.get()) == core.PROMPT_STYLE_NATURAL
+        except ValueError:
+            return False
+
+    def _editor_text(self, widget: tk.Text) -> str:
+        return widget.get("1.0", tk.END).strip()
+
+    def _set_editor(self, widget: tk.Text, content: str) -> None:
+        widget.delete("1.0", tk.END)
+        if content.strip():
+            widget.insert("1.0", content.strip() + "\n")
+
+    def _sync_nl_controls(self) -> None:
+        if not hasattr(self, "step3_btn"):
+            return
+        nl = self._nl_mode()
+        idle = not self.busy
+        has_drafts = bool(self._editor_text(self.character_text)) and bool(
+            self._editor_text(self.summary_text)
+        )
+        self.step3_btn.configure(state=tk.NORMAL if nl and idle and has_drafts else tk.DISABLED)
+        self.save_drafts_btn.configure(state=tk.NORMAL if nl and idle else tk.DISABLED)
+
+    def _on_style_change(self) -> None:
+        self._persist()
+        self._sync_nl_controls()
+
     def _set_busy(self, busy: bool, text: str) -> None:
         self.busy = busy
         state = tk.DISABLED if busy else tk.NORMAL
         self.start_btn.configure(state=state)
         self.status.configure(text=text)
+        self._sync_nl_controls()
 
     def _append_log(self, text: str) -> None:
         self.log.configure(state=tk.NORMAL)
@@ -233,6 +300,22 @@ class SnapshotApp(tk.Tk):
     def _persist(self) -> None:
         save_config(self._snapshot_fields())
 
+    def _try_load_drafts(self, silent: bool = False) -> None:
+        raw = self.novel_path.get().strip()
+        if not raw:
+            return
+        try:
+            novel_path = core.resolve_novel_path(raw)
+            character, summary = core.load_nl_drafts(novel_path)
+        except (FileNotFoundError, IsADirectoryError, OSError, ValueError):
+            return
+        self._set_editor(self.character_text, character)
+        self._set_editor(self.summary_text, summary)
+        self._sync_nl_controls()
+        if not silent:
+            character_path, summary_path = core.nl_draft_paths(novel_path)
+            self._append_log(f"已载入中间稿：{character_path} ； {summary_path}")
+
     def choose_txt(self) -> None:
         current = self.novel_path.get().strip()
         initial = str(Path(current).parent) if current else str(core.ROOT)
@@ -246,6 +329,7 @@ class SnapshotApp(tk.Tk):
         self.novel_path.delete(0, tk.END)
         self.novel_path.insert(0, path)
         self._persist()
+        self._try_load_drafts()
 
     def fetch_models(self) -> None:
         if self.busy:
@@ -279,51 +363,84 @@ class SnapshotApp(tk.Tk):
         self._append_log("可用模型：\n- " + "\n- ".join(models))
         self._persist()
 
-    def start_generate(self) -> None:
-        if self.busy:
-            return
+    def _common_generate_args(self) -> dict | None:
         fields = self._snapshot_fields()
         if not fields["api_url"] or not fields["api_key"]:
             messagebox.showwarning("缺少参数", "请先填写 API 地址和 API Key")
-            return
+            return None
         if not fields["model"]:
             messagebox.showwarning("缺少参数", "请先获取并选择模型")
-            return
+            return None
         if not fields["novel_path"]:
             messagebox.showwarning("缺少参数", "请选择 txt 小说文件")
-            return
+            return None
         try:
             max_tokens = int(fields["max_tokens"])
             if max_tokens <= 0:
                 raise ValueError
         except ValueError:
             messagebox.showwarning("参数错误", "max_tokens 必须是正整数")
-            return
+            return None
         try:
             novel_path = core.resolve_novel_path(fields["novel_path"])
         except (FileNotFoundError, IsADirectoryError, OSError) as exc:
             messagebox.showerror("文件错误", str(exc))
-            return
+            return None
         try:
             prompt_style = core.normalize_prompt_style(fields["prompt_style"])
         except ValueError as exc:
             messagebox.showwarning("参数错误", str(exc))
-            return
+            return None
         try:
             node_count = core.normalize_node_count(fields["node_count"])
         except ValueError as exc:
             messagebox.showwarning("参数错误", str(exc))
-            return
-
+            return None
         self._persist()
-        self._set_busy(True, "正在生成，可能需要 1~3 分钟...")
+        return {
+            "fields": fields,
+            "max_tokens": max_tokens,
+            "novel_path": novel_path,
+            "prompt_style": prompt_style,
+            "node_count": node_count,
+        }
+
+    def start_generate(self) -> None:
+        if self.busy:
+            return
+        args = self._common_generate_args()
+        if args is None:
+            return
+        fields = args["fields"]
+        novel_path = args["novel_path"]
+        prompt_style = args["prompt_style"]
+        max_tokens = args["max_tokens"]
+        node_count = args["node_count"]
+        nl_mode = prompt_style == core.PROMPT_STYLE_NATURAL
+        wait_hint = (
+            "正在生成，自然语言约 3~8 分钟（三次独立对话）..."
+            if nl_mode
+            else "正在生成，可能需要 1~3 分钟..."
+        )
+        self._set_busy(True, wait_hint)
         style_label = core.PROMPT_STYLE_LABELS[prompt_style]
         self._append_log(
             f"开始生成：{novel_path.name} / {fields['model']} / "
             f"max_tokens={max_tokens} / 提示词={style_label} / 分镜数={node_count}"
         )
+        if nl_mode:
+            self._append_log(
+                "自然语言流水线：三次全新 DeepSeek 对话"
+                " → 1) 人物一致性  2) 详细概括（保留故事结构与不同姿势）  3) 出 TAG"
+            )
 
         def worker() -> None:
+            def on_progress(message: str) -> None:
+                self.after(0, lambda text=message: self._on_progress(text))
+
+            def on_step_result(kind: str, content: str) -> None:
+                self.after(0, lambda k=kind, c=content: self._apply_step_result(k, c))
+
             try:
                 result = core.generate_snapshot(
                     novel_path=novel_path,
@@ -333,6 +450,8 @@ class SnapshotApp(tk.Tk):
                     max_tokens=max_tokens,
                     prompt_style=prompt_style,
                     node_count=node_count,
+                    on_progress=on_progress,
+                    on_step_result=on_step_result,
                 )
                 self.after(0, lambda result=result: self._on_generated(result, None))
             except Exception as exc:
@@ -340,7 +459,94 @@ class SnapshotApp(tk.Tk):
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _on_generated(self, result: dict | None, error: str | None) -> None:
+    def save_drafts(self) -> tuple[Path, Path] | None:
+        raw = self.novel_path.get().strip()
+        if not raw:
+            messagebox.showwarning("缺少参数", "请先选择 txt 小说文件，中间稿按小说名保存")
+            return None
+        try:
+            novel_path = core.resolve_novel_path(raw)
+        except (FileNotFoundError, IsADirectoryError, OSError) as exc:
+            messagebox.showerror("文件错误", str(exc))
+            return None
+        character = self._editor_text(self.character_text)
+        summary = self._editor_text(self.summary_text)
+        if not character or not summary:
+            messagebox.showwarning("缺少内容", "人物一致性和故事概括都不能为空")
+            return None
+        paths = core.write_nl_drafts(novel_path, character, summary)
+        self._append_log(f"已保存中间稿：{paths[0]} ； {paths[1]}")
+        self._sync_nl_controls()
+        return paths
+
+    def start_step3(self) -> None:
+        if self.busy:
+            return
+        if not self._nl_mode():
+            messagebox.showwarning("提示词类型", "只跑第三步仅支持自然语言")
+            return
+        args = self._common_generate_args()
+        if args is None:
+            return
+        character = self._editor_text(self.character_text)
+        summary = self._editor_text(self.summary_text)
+        if not character or not summary:
+            messagebox.showwarning("缺少内容", "请先有人物一致性和故事概括，或先跑完整三步")
+            return
+        fields = args["fields"]
+        novel_path = args["novel_path"]
+        try:
+            core.write_nl_drafts(novel_path, character, summary)
+        except OSError as exc:
+            messagebox.showerror("保存失败", str(exc))
+            return
+        self._set_busy(True, "正在按当前稿件重跑第三步...")
+        self._append_log(
+            f"只跑第三步：{novel_path.name} / {fields['model']} / 分镜数={args['node_count']}"
+        )
+        self._append_log("将使用当前「人物一致性」和「故事概括」页的文本，不再读小说原文。")
+
+        def worker() -> None:
+            def on_progress(message: str) -> None:
+                self.after(0, lambda text=message: self._on_progress(text))
+
+            try:
+                result = core.generate_nl_tag_from_materials(
+                    novel_path=novel_path,
+                    character_bible=character,
+                    summary=summary,
+                    api_url=fields["api_url"],
+                    api_key=fields["api_key"],
+                    model=fields["model"],
+                    max_tokens=args["max_tokens"],
+                    node_count=args["node_count"],
+                    on_progress=on_progress,
+                )
+                self.after(0, lambda result=result: self._on_generated(result, None, step3=True))
+            except Exception as exc:
+                self.after(0, lambda err=str(exc): self._on_generated(None, err, step3=True))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_progress(self, message: str) -> None:
+        self._append_log(message)
+        self.status.configure(text=message)
+
+    def _apply_step_result(self, kind: str, content: str) -> None:
+        if kind == "character":
+            self._set_editor(self.character_text, content)
+            self._append_log("第一步完成，已写入「人物一致性」页，可随时修改。")
+        elif kind == "summary":
+            self._set_editor(self.summary_text, content)
+            self._append_log("第二步完成，已写入「故事概括」页，可随时修改。")
+        self._sync_nl_controls()
+
+    def _on_generated(
+        self,
+        result: dict | None,
+        error: str | None,
+        step3: bool = False,
+    ) -> None:
         self._set_busy(False, "就绪")
         if error or not result:
             self._append_log(error or "生成失败")
@@ -349,13 +555,23 @@ class SnapshotApp(tk.Tk):
         output_path: Path = result["output_path"]
         self.last_output_path = output_path
         self.open_dir_btn.configure(state=tk.NORMAL)
+        if result.get("character_bible"):
+            self._set_editor(self.character_text, str(result["character_bible"]))
+        if result.get("summary"):
+            self._set_editor(self.summary_text, str(result["summary"]))
+        self._sync_nl_controls()
         self._append_log("\n".join(result["report"]))
         self._append_log(f"已写入: {output_path}")
+        if result.get("character_path"):
+            self._append_log(f"人物一致性稿: {result['character_path']}")
+        if result.get("summary_path"):
+            self._append_log(f"故事概括稿: {result['summary_path']}")
         if result.get("truncated"):
             self._append_log("正文过长，已截取开头送入。")
+        done_text = "第三步完成，已打开 md" if step3 else "生成完成，已打开 md"
         try:
             core.open_path(output_path)
-            self.status.configure(text="生成完成，已打开 md")
+            self.status.configure(text=done_text)
         except OSError as exc:
             self._append_log(f"文件已生成，但自动打开失败: {exc}")
             messagebox.showinfo("生成完成", f"已保存到:\n{output_path}")
