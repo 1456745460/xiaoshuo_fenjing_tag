@@ -261,8 +261,9 @@ def build_user_prompt(
         )
     elif style == PROMPT_STYLE_NATURAL:
         prompt_rule = (
-            "每个节点的中文提示词和英文提示词必须是完整自然语言画面描述，"
-            "可直接用于自然语言文生图。禁止输出 Danbooru tag、snake_case、逗号堆砌标签。"
+            "中文提示词必须是完整画面描述；英文必须是 Anima 混合写法："
+            "标签块（masterpiece, best quality, score_7 + 1girl/1boy + 按人外观服装）空一行后再写短句。"
+            "禁止英文散文、snake_case、BREAK、(word:1.2)、looking_at_viewer。"
             "多人同框必须一人一句，主语带外貌锚点，独有特征禁止写成全画面清单。"
             "段首先锁人数：画面里只有 N 个人（N≤3）。每个分镜最多 3 个可识别人物；正文超过 3 人必须拆镜或只留核心 1～3 人，禁止 4 人同框。"
             "禁止用玻璃倒影、married/丈夫/妻子、走廊路人把两人写成三人、三人写成四人。"
@@ -329,9 +330,12 @@ def build_nl_tag_user_prompt(
 ) -> str:
     count = normalize_node_count(node_count)
     prompt_rule = (
-        "每个节点的中文提示词和英文提示词必须是完整自然语言画面描述，"
-        "可直接用于自然语言文生图。禁止输出 Danbooru tag、snake_case、逗号堆砌标签。"
-        "多人同框必须一人一句，主语带外貌锚点，独有特征禁止写成全画面清单。"
+        "中文提示词必须是完整画面描述，一人一句，主语带外貌锚点。"
+        "英文提示词必须是 Anima 混合写法：先写小写空格分词的标签块"
+        "（masterpiece, best quality, score_7，NSFW 加 explicit，再写 1girl/1boy 和按人分行的外观服装），"
+        "空一行后写 4 到 6 句短英文（构图、左、右、光影、归属）。"
+        "禁止把英文写成一篇嵌套从句散文。禁止 snake_case、BREAK、(word:1.2)、looking_at_viewer。"
+        "锁定外貌要素写进英文标签段；短句只回锚 2～4 个辨识点，不要把锁定句整段嵌进从句。"
         "段首先锁人数：画面里只有 N 个人（N≤3）。每个分镜最多 3 个可识别人物；"
         "概括超过 3 人必须拆镜或只留核心 1～3 人，禁止 4 人同框。"
         "禁止用玻璃倒影、married/丈夫/妻子、走廊路人把两人写成三人、三人写成四人。"
@@ -396,6 +400,7 @@ def evaluate(
         content,
         flags=re.I,
     )
+    mixed_quality = re.findall(r"\b(?:masterpiece|best quality|score_7)\b", content, flags=re.I)
     found_count = max(len(node_hits), len(cn_hits), len(en_hits))
     lines = [
         f"提示词类型: {PROMPT_STYLE_LABELS[style]}",
@@ -404,22 +409,43 @@ def evaluate(
         f"节点标题数: {len(node_hits)}",
         f"中文提示词块: {len(cn_hits)}",
         f"英文提示词块: {len(en_hits)}",
-        f"禁用质量套话: {quality_hits or '无'}",
     ]
-    structure_ok = has_bible and found_count == expected and not quality_hits
-    if style in (PROMPT_STYLE_NATURAL, PROMPT_STYLE_KREA2):
-        lines.append(f"Danbooru tag 残留: {len(tag_hits)}")
-        ok = structure_ok
-        if len(tag_hits) >= 8:
-            target = "Krea2 导演简报" if style == PROMPT_STYLE_KREA2 else "自然语言"
-            lines.append(f"警告: 正文里仍出现较多 Danbooru tag，请核对是否按{target}输出")
+    if style == PROMPT_STYLE_NATURAL:
+        count_hits = re.findall(r"\b(?:1girl|1boy|2girls|3girls)\b", content)
+        snake_hits = re.findall(
+            r"\b(?:black_hair|long_hair|looking_at_viewer|natural_skin|full_body)\b",
+            content,
+        )
+        lines.append(f"Anima 混合质量锚点: {len(mixed_quality)}")
+        lines.append(f"Anima 人数 tag: {len(count_hits)}")
+        lines.append(f"snake_case 残留: {len(snake_hits)}")
+        ok = has_bible and found_count == expected
+        if len(mixed_quality) < expected:
+            lines.append("警告: 英文提示词缺少 masterpiece / best quality / score_7 前缀")
             ok = False
-        if style == PROMPT_STYLE_KREA2 and "全书视觉锁定" not in content:
+        if len(count_hits) < expected:
+            lines.append("警告: 英文提示词缺少 1girl/1boy 人数锚点，Anima 混合写法会变弱")
+            ok = False
+        if snake_hits:
+            lines.append("警告: 英文仍有 snake_case，Anima 混合写法应改用空格分词")
+            ok = False
+        if "BREAK" in content:
+            lines.append("警告: 英文出现 BREAK，第三步混合写法不要用纯 Danbooru 分块")
+            ok = False
+    elif style == PROMPT_STYLE_KREA2:
+        lines.append(f"禁用质量套话: {quality_hits or '无'}")
+        lines.append(f"Danbooru tag 残留: {len(tag_hits)}")
+        ok = has_bible and found_count == expected and not quality_hits
+        if len(tag_hits) >= 8:
+            lines.append("警告: 正文里仍出现较多 Danbooru tag，请核对是否按 Krea2 导演简报输出")
+            ok = False
+        if "全书视觉锁定" not in content:
             lines.append("警告: 未找到全书视觉锁定，Krea2 容易漂风格")
             ok = False
     else:
+        lines.append(f"禁用质量套话: {quality_hits or '无'}")
         lines.append(f"关键 Anima tag 命中: {len(tag_hits)}")
-        ok = structure_ok and len(tag_hits) >= 8
+        ok = has_bible and found_count == expected and not quality_hits and len(tag_hits) >= 8
     lines.append(f"结构校验: {'通过' if ok else '未完全通过，请看正文'}")
     return lines
 

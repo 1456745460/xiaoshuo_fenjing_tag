@@ -179,7 +179,7 @@ class SnapshotApp(tk.Tk):
 
         ttk.Label(
             root,
-            text="自然语言：前两步结果会出现在「人物一致性」「故事概括」页，改完后可只重跑第三步。",
+            text="自然语言：前两步结果会出现在「人物一致性」「故事概括」页，改完后可只重跑第三步。第三步英文是 Anima 混合写法（标签+短句），不是散文。",
         ).pack(anchor=tk.W, pady=(0, 4))
 
         self.notebook = ttk.Notebook(root)
@@ -197,7 +197,7 @@ class SnapshotApp(tk.Tk):
             "1. 填写 API 地址和 Key\n"
             "2. 点「获取模型」后选择模型\n"
             "3. 选择提示词类型：Danbooru（Anima tag）、自然语言、或 Krea2（二次元分镜简报，贴英文）\n"
-            "   自然语言会分三次独立 DeepSeek 对话：人物一致性 → 详细概括 → 再出 TAG\n"
+            "   自然语言会分三次独立 DeepSeek 对话：人物一致性 → 详细概括 → Anima 混合 TAG（标签+短句）\n"
             f"4. 填写分镜数（{core.MIN_NODE_COUNT} 到 {core.MAX_NODE_COUNT}，生成固定数量）\n"
             "5. 选择 txt 小说，点「开始生成」\n"
             "6. 自然语言生成后，可在「人物一致性」「故事概括」页直接改稿，再点「只跑第三步出 TAG」\n"
