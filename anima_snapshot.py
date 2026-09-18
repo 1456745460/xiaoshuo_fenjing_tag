@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""小说节点快照：读取 txt，调用 OpenAI 兼容接口生成 Anima / 自然语言 / Krea2 提示词。"""
+"""小说节点快照：读取 txt，调用 Chat Completions 或 Responses 接口生成提示词。"""
 
 from __future__ import annotations
 
@@ -47,6 +47,21 @@ MIN_NODE_COUNT = 1
 MAX_NODE_COUNT = 100
 DEFAULT_NODE_COUNT = 12
 NODE_COUNT_PLACEHOLDER = "{{NODE_COUNT}}"
+API_BACKEND_AUTO = "auto"
+API_BACKEND_CHAT = "chat_completions"
+API_BACKEND_RESPONSES = "responses"
+DEFAULT_API_BACKEND = API_BACKEND_AUTO
+DEFAULT_USER_AGENT = "xiaoshuo-fenjing-tag/1.0"
+API_BACKEND_LABELS = {
+    API_BACKEND_AUTO: "自动",
+    API_BACKEND_CHAT: "Chat Completions",
+    API_BACKEND_RESPONSES: "Responses",
+}
+API_BACKEND_CHOICES = [
+    (API_BACKEND_AUTO, "自动（Grok 用 Responses，DeepSeek 用 Chat）"),
+    (API_BACKEND_CHAT, "Chat Completions"),
+    (API_BACKEND_RESPONSES, "Responses"),
+]
 _PROMPT_STYLE_ALIASES = {
     "danbooru": PROMPT_STYLE_DANBOORU,
     "tag": PROMPT_STYLE_DANBOORU,
@@ -68,18 +83,64 @@ def api_base(url: str) -> str:
     base = (url or "").strip().rstrip("/")
     if not base:
         raise ValueError("API 地址不能为空")
-    for suffix in ("/chat/completions", "/completions", "/models", "/v1"):
+    for suffix in ("/chat/completions", "/completions", "/responses", "/models"):
         if base.endswith(suffix):
             base = base[: -len(suffix)].rstrip("/")
+            break
     return base
 
 
+def endpoint_urls(base: str, path: str) -> list[str]:
+    urls = [f"{base}/{path}"]
+    if not base.endswith("/v1"):
+        urls.append(f"{base}/v1/{path}")
+    return urls
+
+
 def models_urls(base: str) -> list[str]:
-    return [f"{base}/models", f"{base}/v1/models"]
+    return endpoint_urls(base, "models")
 
 
 def chat_urls(base: str) -> list[str]:
-    return [f"{base}/chat/completions", f"{base}/v1/chat/completions"]
+    return endpoint_urls(base, "chat/completions")
+
+
+def responses_urls(base: str) -> list[str]:
+    return endpoint_urls(base, "responses")
+
+
+def infer_api_backend(model: str) -> str:
+    name = (model or "").strip().lower()
+    if name.startswith("grok") or name.startswith("xai/") or "/grok" in name:
+        return API_BACKEND_RESPONSES
+    return API_BACKEND_CHAT
+
+
+def normalize_api_backend(raw: str | None, model: str = "") -> str:
+    text = (raw or DEFAULT_API_BACKEND).strip().lower().replace("-", "_")
+    aliases = {
+        "": API_BACKEND_AUTO,
+        "auto": API_BACKEND_AUTO,
+        "automatic": API_BACKEND_AUTO,
+        "自动": API_BACKEND_AUTO,
+        "chat": API_BACKEND_CHAT,
+        "chat_completion": API_BACKEND_CHAT,
+        "chat_completions": API_BACKEND_CHAT,
+        "openai": API_BACKEND_CHAT,
+        "completions": API_BACKEND_CHAT,
+        "deepseek": API_BACKEND_CHAT,
+        "responses": API_BACKEND_RESPONSES,
+        "response": API_BACKEND_RESPONSES,
+        "grok": API_BACKEND_RESPONSES,
+    }
+    if text not in aliases:
+        raise ValueError(
+            f"不支持的 API 协议: {raw}（可选 auto / chat_completions / responses）"
+        )
+    backend = aliases[text]
+    if backend == API_BACKEND_AUTO:
+        return infer_api_backend(model)
+    return backend
 
 
 def http_json(
@@ -93,6 +154,8 @@ def http_json(
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": DEFAULT_USER_AGENT,
     }
     data = None if body is None else json.dumps(body, ensure_ascii=False).encode("utf-8")
     request = urllib.request.Request(url, data=data, method=method, headers=headers)
@@ -214,13 +277,27 @@ def emit_progress(on_progress: Callable[[str], None] | None, message: str) -> No
         on_progress(message)
 
 
+def normalize_usage(usage: dict | None) -> dict:
+    data = dict(usage or {})
+    if "prompt_tokens" not in data and isinstance(data.get("input_tokens"), int):
+        data["prompt_tokens"] = data["input_tokens"]
+    if "completion_tokens" not in data and isinstance(data.get("output_tokens"), int):
+        data["completion_tokens"] = data["output_tokens"]
+    if "total_tokens" not in data:
+        prompt = data.get("prompt_tokens")
+        completion = data.get("completion_tokens")
+        if isinstance(prompt, int) and isinstance(completion, int):
+            data["total_tokens"] = prompt + completion
+    return data
+
+
 def merge_usage(*usages: dict) -> dict:
     merged: dict[str, int] = {}
     for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
         total = 0
         found = False
         for usage in usages:
-            value = (usage or {}).get(key)
+            value = normalize_usage(usage).get(key)
             if isinstance(value, int):
                 total += value
                 found = True
@@ -367,20 +444,65 @@ def build_nl_tag_user_prompt(
     )
 
 
+def _text_from_parts(parts: object) -> str:
+    chunks: list[str] = []
+    if isinstance(parts, str):
+        return parts.strip()
+    if not isinstance(parts, list):
+        return ""
+    for part in parts:
+        if isinstance(part, str) and part.strip():
+            chunks.append(part.strip())
+        elif isinstance(part, dict):
+            kind = str(part.get("type") or "")
+            if kind in ("output_text", "text") or not kind:
+                text = part.get("text") or part.get("content") or ""
+                if isinstance(text, str) and text.strip():
+                    chunks.append(text.strip())
+    return "\n".join(chunks).strip()
+
+
 def extract_content(api_result: dict) -> str:
+    output_text = api_result.get("output_text")
+    if isinstance(output_text, str) and output_text.strip():
+        return output_text.strip()
+
+    texts: list[str] = []
+    for item in api_result.get("output") or []:
+        if not isinstance(item, dict):
+            continue
+        kind = str(item.get("type") or "")
+        if kind == "reasoning":
+            continue
+        if kind == "message":
+            text = _text_from_parts(item.get("content"))
+        elif kind in ("output_text", "text"):
+            text = str(item.get("text") or "").strip()
+        else:
+            text = _text_from_parts(item.get("content"))
+        if text:
+            texts.append(text)
+    if texts:
+        return "\n\n".join(texts)
+
     choices = api_result.get("choices") or []
-    if not choices:
-        raise RuntimeError(f"接口返回没有 choices: {api_result}")
-    message = choices[0].get("message") or {}
-    content = (message.get("content") or "").strip()
-    if not content:
+    if choices:
+        message = choices[0].get("message") or {}
+        content = (message.get("content") or "").strip()
+        if content:
+            return content
         reasoning = (message.get("reasoning_content") or "").strip()
         finish = choices[0].get("finish_reason")
         raise RuntimeError(
             "接口返回空 content。"
             f" finish_reason={finish}, reasoning_len={len(reasoning)}"
         )
-    return content
+
+    status = api_result.get("status") or "未知"
+    error = api_result.get("error")
+    raise RuntimeError(
+        f"接口返回没有正文。status={status}, error={error}"
+    )
 
 
 def evaluate(
@@ -474,6 +596,76 @@ def evaluate_nl_pipeline(
     return lines
 
 
+def _is_protocol_error(message: str) -> bool:
+    lower = message.lower()
+    return (
+        "protocol_not_supported" in lower
+        or "不支持 chat completions" in message
+        or "不支持 chat completion" in message
+        or "does not support chat completions" in lower
+        or "unsupported protocol" in lower
+        or "unknown endpoint" in lower
+    )
+
+
+def _post_payloads(
+    *,
+    urls: list[str],
+    payloads: list[dict],
+    api_key: str,
+    timeout: int,
+    errors: list[str],
+) -> dict:
+    for url in urls:
+        for payload in payloads:
+            try:
+                return http_json(
+                    "POST",
+                    url,
+                    api_key=api_key,
+                    body=payload,
+                    timeout=timeout,
+                )
+            except RuntimeError as exc:
+                errors.append(str(exc))
+    raise RuntimeError("生成失败：\n" + "\n".join(errors))
+
+
+def _chat_payloads(model: str, system_prompt: str, user_prompt: str, max_tokens: int) -> list[dict]:
+    base = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.3,
+        "max_tokens": int(max_tokens),
+        "stream": False,
+    }
+    return [
+        {**base, "thinking": {"type": "disabled"}},
+        base,
+    ]
+
+
+def _responses_payloads(
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int,
+) -> list[dict]:
+    simple = {
+        "model": model,
+        "instructions": system_prompt,
+        "input": user_prompt,
+        "max_output_tokens": int(max_tokens),
+    }
+    return [
+        {**simple, "temperature": 0.3, "stream": False},
+        simple,
+    ]
+
+
 def chat_completion(
     *,
     api_url: str,
@@ -482,46 +674,51 @@ def chat_completion(
     system_prompt: str,
     user_prompt: str,
     max_tokens: int,
-    timeout: int = 300,
+    timeout: int | None = None,
+    api_backend: str | None = None,
 ) -> dict:
     key = api_key.strip()
     if not key:
         raise ValueError("API Key 不能为空")
-    if not model.strip():
+    model_name = model.strip()
+    if not model_name:
         raise ValueError("模型不能为空")
+    backend = normalize_api_backend(api_backend, model_name)
+    wait = timeout if timeout is not None else (600 if backend == API_BACKEND_RESPONSES else 300)
     base = api_base(api_url)
-    payload = {
-        "model": model.strip(),
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": 0.3,
-        "max_tokens": int(max_tokens),
-        "stream": False,
-        "thinking": {"type": "disabled"},
-    }
     errors: list[str] = []
-    for url in chat_urls(base):
-        current = dict(payload)
-        for _ in range(2):
-            try:
-                return http_json(
-                    "POST",
-                    url,
-                    api_key=key,
-                    body=current,
-                    timeout=timeout,
-                )
-            except RuntimeError as exc:
-                message = str(exc)
-                errors.append(message)
-                if "thinking" in current and (
-                    "thinking" in message.lower() or "HTTP 400" in message
-                ):
-                    current = {k: v for k, v in current.items() if k != "thinking"}
-                    continue
-                break
+    attempts = [backend]
+    if (api_backend or DEFAULT_API_BACKEND) in ("", API_BACKEND_AUTO, "自动", "auto"):
+        fallback = (
+            API_BACKEND_CHAT
+            if backend == API_BACKEND_RESPONSES
+            else API_BACKEND_RESPONSES
+        )
+        if fallback not in attempts:
+            attempts.append(fallback)
+
+    for current_backend in attempts:
+        urls = responses_urls(base) if current_backend == API_BACKEND_RESPONSES else chat_urls(base)
+        payloads = (
+            _responses_payloads(model_name, system_prompt, user_prompt, max_tokens)
+            if current_backend == API_BACKEND_RESPONSES
+            else _chat_payloads(model_name, system_prompt, user_prompt, max_tokens)
+        )
+        try:
+            return _post_payloads(
+                urls=urls,
+                payloads=payloads,
+                api_key=key,
+                timeout=wait,
+                errors=errors,
+            )
+        except RuntimeError as exc:
+            message = str(exc)
+            if current_backend == attempts[-1] or (
+                current_backend == backend and not _is_protocol_error(message)
+            ):
+                raise
+            continue
     raise RuntimeError("生成失败：\n" + "\n".join(errors))
 
 
@@ -625,6 +822,7 @@ def run_chat_step(
     user_prompt: str,
     max_tokens: int,
     on_progress: Callable[[str], None] | None = None,
+    api_backend: str | None = None,
 ) -> tuple[str, dict]:
     emit_progress(on_progress, step_name)
     result = chat_completion(
@@ -634,11 +832,12 @@ def run_chat_step(
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         max_tokens=max_tokens,
+        api_backend=api_backend,
     )
     content = extract_content(result)
     if not content.strip():
         raise RuntimeError(f"{step_name} 返回空内容")
-    return content, result.get("usage") or {}
+    return content, normalize_usage(result.get("usage") or {})
 
 
 def generate_nl_tag_from_materials(
@@ -657,6 +856,7 @@ def generate_nl_tag_from_materials(
     truncated: bool = False,
     novel_chars: int = 0,
     extra_system_chars: int = 0,
+    api_backend: str | None = None,
 ) -> dict:
     bible = character_bible.strip()
     plot = summary.strip()
@@ -676,6 +876,7 @@ def generate_nl_tag_from_materials(
         user_prompt=build_nl_tag_user_prompt(bible, plot, novel_path.name, count),
         max_tokens=max_tokens,
         on_progress=on_progress,
+        api_backend=api_backend,
     )
     usages = list(prior_usages or []) + [usage_tag]
     usage = merge_usage(*usages)
@@ -747,6 +948,7 @@ def generate_nl_three_step_snapshot(
     node_count: int,
     on_progress: Callable[[str], None] | None = None,
     on_step_result: Callable[[str, str], None] | None = None,
+    api_backend: str | None = None,
 ) -> dict:
     count = normalize_node_count(node_count)
     character_system = render_system_prompt(load_text(NL_CHARACTER_PROMPT_PATH))
@@ -761,6 +963,7 @@ def generate_nl_three_step_snapshot(
         user_prompt=build_nl_character_user_prompt(novel, novel_path.name),
         max_tokens=max_tokens,
         on_progress=on_progress,
+        api_backend=api_backend,
     )
     write_nl_character_draft(novel_path, character_bible)
     if on_step_result is not None:
@@ -775,6 +978,7 @@ def generate_nl_three_step_snapshot(
         user_prompt=build_nl_summary_user_prompt(novel, novel_path.name),
         max_tokens=max_tokens,
         on_progress=on_progress,
+        api_backend=api_backend,
     )
     write_nl_summary_draft(novel_path, summary)
     if on_step_result is not None:
@@ -795,6 +999,7 @@ def generate_nl_three_step_snapshot(
         truncated=truncated,
         novel_chars=len(novel),
         extra_system_chars=len(character_system) + len(summary_system),
+        api_backend=api_backend,
     )
     result["pipeline"] = "nl_three_step"
     return result
@@ -812,6 +1017,7 @@ def generate_snapshot(
     node_count: int = DEFAULT_NODE_COUNT,
     on_progress: Callable[[str], None] | None = None,
     on_step_result: Callable[[str, str], None] | None = None,
+    api_backend: str | None = None,
 ) -> dict:
     style = normalize_prompt_style(prompt_style)
     count = normalize_node_count(node_count)
@@ -830,6 +1036,7 @@ def generate_snapshot(
             node_count=count,
             on_progress=on_progress,
             on_step_result=on_step_result,
+            api_backend=api_backend,
         )
 
     system_prompt = render_system_prompt(load_text(prompt_path_for(style)), count)
@@ -842,9 +1049,10 @@ def generate_snapshot(
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         max_tokens=max_tokens,
+        api_backend=api_backend,
     )
     content = extract_content(result)
-    usage = result.get("usage") or {}
+    usage = normalize_usage(result.get("usage") or {})
     report = evaluate(content, style, count)
     output_path = write_output(
         content=content,

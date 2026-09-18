@@ -49,6 +49,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--summary",
         help="故事概括稿路径。省略则读取 outputs/intermediates/<小说名>_summary.md",
     )
+    parser.add_argument(
+        "--backend",
+        default=os.environ.get(
+            "SNAPSHOT_API_BACKEND",
+            os.environ.get("DEEPSEEK_API_BACKEND", core.DEFAULT_API_BACKEND),
+        ),
+        help="API 协议：auto、chat_completions 或 responses。也可用 SNAPSHOT_API_BACKEND",
+    )
     return parser.parse_args(argv)
 
 
@@ -75,16 +83,38 @@ def main(argv: list[str] | None = None) -> int:
         print("只跑第三步仅支持 --style natural", file=sys.stderr)
         return 2
 
-    api_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
+    api_key = (
+        os.environ.get("SNAPSHOT_API_KEY")
+        or os.environ.get("DEEPSEEK_API_KEY")
+        or os.environ.get("GROK_API_KEY")
+        or ""
+    ).strip()
     if not api_key:
-        print("缺少环境变量 DEEPSEEK_API_KEY", file=sys.stderr)
+        print("缺少环境变量 SNAPSHOT_API_KEY / DEEPSEEK_API_KEY / GROK_API_KEY", file=sys.stderr)
         return 2
 
-    api_url = os.environ.get("DEEPSEEK_API_URL", core.DEFAULT_API_URL)
-    model = os.environ.get("DEEPSEEK_MODEL", core.DEFAULT_MODEL)
-    max_tokens = int(os.environ.get("DEEPSEEK_MAX_TOKENS", str(core.DEFAULT_MAX_TOKENS)))
+    api_url = os.environ.get(
+        "SNAPSHOT_API_URL",
+        os.environ.get("DEEPSEEK_API_URL", core.DEFAULT_API_URL),
+    )
+    model = os.environ.get(
+        "SNAPSHOT_MODEL",
+        os.environ.get("DEEPSEEK_MODEL", core.DEFAULT_MODEL),
+    )
+    max_tokens = int(
+        os.environ.get(
+            "SNAPSHOT_MAX_TOKENS",
+            os.environ.get("DEEPSEEK_MAX_TOKENS", str(core.DEFAULT_MAX_TOKENS)),
+        )
+    )
+    try:
+        api_backend = core.normalize_api_backend(args.backend, model)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
 
     print(f"模型: {model}")
+    print(f"协议: {core.API_BACKEND_LABELS.get(api_backend, api_backend)}")
     print(f"小说: {novel_path}")
     print(f"提示词类型: {core.PROMPT_STYLE_LABELS[prompt_style]} ({prompt_style})")
     print(f"分镜数: {node_count}")
@@ -111,6 +141,7 @@ def main(argv: list[str] | None = None) -> int:
                 max_tokens=max_tokens,
                 node_count=node_count,
                 on_progress=print,
+                api_backend=args.backend,
             )
         else:
             max_chars = int(
@@ -158,6 +189,7 @@ def main(argv: list[str] | None = None) -> int:
                 prompt_style=prompt_style,
                 node_count=node_count,
                 on_progress=print,
+                api_backend=args.backend,
             )
     except Exception as exc:
         print(str(exc), file=sys.stderr)

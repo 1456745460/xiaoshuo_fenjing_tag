@@ -2,6 +2,7 @@
   "api_url": "https://api.deepseek.com",
   "api_key": "",
   "max_tokens": "16384",
+  "api_backend": "auto",
   "model": "deepseek-v4-pro",
   "novel_path": "",
   "prompt_style": "danbooru",

@@ -90,9 +90,32 @@ class SnapshotApp(tk.Tk):
             form, 2, "max_tokens", str(self.cfg.get("max_tokens") or core.DEFAULT_MAX_TOKENS)
         )
 
-        ttk.Label(form, text="模型").grid(row=3, column=0, sticky=tk.W, pady=6)
+        ttk.Label(form, text="API 协议").grid(row=3, column=0, sticky=tk.W, pady=6)
+        self._backend_labels = {value: label for value, label in core.API_BACKEND_CHOICES}
+        self._backend_values = {label: value for value, label in core.API_BACKEND_CHOICES}
+        saved_backend = str(self.cfg.get("api_backend") or core.DEFAULT_API_BACKEND)
+        if saved_backend not in self._backend_labels:
+            saved_backend = core.DEFAULT_API_BACKEND
+        self.backend_var = tk.StringVar(value=self._backend_labels[saved_backend])
+        backend_row = ttk.Frame(form)
+        backend_row.grid(row=3, column=1, columnspan=2, sticky=tk.EW, pady=6)
+        backend_row.columnconfigure(0, weight=1)
+        self.backend_combo = ttk.Combobox(
+            backend_row,
+            textvariable=self.backend_var,
+            state="readonly",
+            values=[choice[1] for choice in core.API_BACKEND_CHOICES],
+        )
+        self.backend_combo.grid(row=0, column=0, sticky=tk.EW)
+        self.backend_combo.bind("<<ComboboxSelected>>", lambda _event: self._persist())
+        ttk.Label(
+            backend_row,
+            text="Grok 4.6 必须用 Responses",
+        ).grid(row=0, column=1, padx=(8, 0), sticky=tk.W)
+
+        ttk.Label(form, text="模型").grid(row=4, column=0, sticky=tk.W, pady=6)
         model_row = ttk.Frame(form)
-        model_row.grid(row=3, column=1, columnspan=2, sticky=tk.EW, pady=6)
+        model_row.grid(row=4, column=1, columnspan=2, sticky=tk.EW, pady=6)
         model_row.columnconfigure(0, weight=1)
         self.model_combo = ttk.Combobox(model_row, textvariable=self.model_var)
         saved_models = self.cfg.get("models") or []
@@ -103,9 +126,9 @@ class SnapshotApp(tk.Tk):
             row=0, column=1, padx=(8, 0)
         )
 
-        ttk.Label(form, text="小说 txt").grid(row=4, column=0, sticky=tk.W, pady=6)
+        ttk.Label(form, text="小说 txt").grid(row=5, column=0, sticky=tk.W, pady=6)
         file_row = ttk.Frame(form)
-        file_row.grid(row=4, column=1, columnspan=2, sticky=tk.EW, pady=6)
+        file_row.grid(row=5, column=1, columnspan=2, sticky=tk.EW, pady=6)
         file_row.columnconfigure(0, weight=1)
         self.novel_path = ttk.Entry(file_row)
         self.novel_path.insert(0, str(self.cfg.get("novel_path") or ""))
@@ -114,9 +137,9 @@ class SnapshotApp(tk.Tk):
             row=0, column=1, padx=(8, 0)
         )
 
-        ttk.Label(form, text="提示词类型").grid(row=5, column=0, sticky=tk.W, pady=6)
+        ttk.Label(form, text="提示词类型").grid(row=6, column=0, sticky=tk.W, pady=6)
         style_row = ttk.Frame(form)
-        style_row.grid(row=5, column=1, columnspan=2, sticky=tk.W, pady=6)
+        style_row.grid(row=6, column=1, columnspan=2, sticky=tk.W, pady=6)
         ttk.Radiobutton(
             style_row,
             text="Danbooru",
@@ -139,9 +162,9 @@ class SnapshotApp(tk.Tk):
             command=self._on_style_change,
         ).pack(side=tk.LEFT, padx=(16, 0))
 
-        ttk.Label(form, text="分镜数").grid(row=6, column=0, sticky=tk.W, pady=6)
+        ttk.Label(form, text="分镜数").grid(row=7, column=0, sticky=tk.W, pady=6)
         count_row = ttk.Frame(form)
-        count_row.grid(row=6, column=1, columnspan=2, sticky=tk.W, pady=6)
+        count_row.grid(row=7, column=1, columnspan=2, sticky=tk.W, pady=6)
         self.node_count = ttk.Entry(count_row, width=8)
         self.node_count.insert(0, self._saved_node_count)
         self.node_count.pack(side=tk.LEFT)
@@ -194,14 +217,15 @@ class SnapshotApp(tk.Tk):
         log_scroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.log.insert(
             tk.END,
-            "1. 填写 API 地址和 Key\n"
-            "2. 点「获取模型」后选择模型\n"
-            "3. 选择提示词类型：Danbooru（Anima tag）、自然语言、或 Krea2（二次元分镜简报，贴英文）\n"
-            "   自然语言会分三次独立 DeepSeek 对话：人物一致性 → 详细概括 → Anima 混合 TAG（标签+短句）\n"
-            f"4. 填写分镜数（{core.MIN_NODE_COUNT} 到 {core.MAX_NODE_COUNT}，生成固定数量）\n"
-            "5. 选择 txt 小说，点「开始生成」\n"
-            "6. 自然语言生成后，可在「人物一致性」「故事概括」页直接改稿，再点「只跑第三步出 TAG」\n"
-            "7. 完成后会自动打开生成的 md，也可点「打开文件所在目录」\n",
+            "1. 填写 API 地址和 Key。Grok / packyapi 填 https://www.packyapi.ai/v1\n"
+            "2. API 协议选「自动」即可：grok-4.6 走 Responses，DeepSeek 走 Chat Completions\n"
+            "3. 点「获取模型」后选择模型\n"
+            "4. 选择提示词类型：Danbooru（Anima tag）、自然语言、或 Krea2（二次元分镜简报，贴英文）\n"
+            "   自然语言会分三次独立对话：人物一致性 → 详细概括 → Anima 混合 TAG（标签+短句）\n"
+            f"5. 填写分镜数（{core.MIN_NODE_COUNT} 到 {core.MAX_NODE_COUNT}，生成固定数量）\n"
+            "6. 选择 txt 小说，点「开始生成」\n"
+            "7. 自然语言生成后，可在「人物一致性」「故事概括」页直接改稿，再点「只跑第三步出 TAG」\n"
+            "8. 完成后会自动打开生成的 md，也可点「打开文件所在目录」\n",
         )
         self.log.configure(state=tk.DISABLED)
 
@@ -290,6 +314,10 @@ class SnapshotApp(tk.Tk):
             "api_url": self.api_url.get().strip(),
             "api_key": self.api_key.get().strip(),
             "max_tokens": self.max_tokens.get().strip(),
+            "api_backend": self._backend_values.get(
+                self.backend_var.get().strip(),
+                core.DEFAULT_API_BACKEND,
+            ),
             "model": self.model_var.get().strip(),
             "novel_path": self.novel_path.get().strip(),
             "prompt_style": self.prompt_style_var.get().strip(),
@@ -396,6 +424,13 @@ class SnapshotApp(tk.Tk):
         except ValueError as exc:
             messagebox.showwarning("参数错误", str(exc))
             return None
+        try:
+            resolved_backend = core.normalize_api_backend(
+                fields.get("api_backend"), fields["model"]
+            )
+        except ValueError as exc:
+            messagebox.showwarning("参数错误", str(exc))
+            return None
         self._persist()
         return {
             "fields": fields,
@@ -403,6 +438,8 @@ class SnapshotApp(tk.Tk):
             "novel_path": novel_path,
             "prompt_style": prompt_style,
             "node_count": node_count,
+            "api_backend": fields.get("api_backend") or core.DEFAULT_API_BACKEND,
+            "resolved_backend": resolved_backend,
         }
 
     def start_generate(self) -> None:
@@ -424,13 +461,17 @@ class SnapshotApp(tk.Tk):
         )
         self._set_busy(True, wait_hint)
         style_label = core.PROMPT_STYLE_LABELS[prompt_style]
+        backend_label = core.API_BACKEND_LABELS.get(
+            args["resolved_backend"], args["resolved_backend"]
+        )
         self._append_log(
             f"开始生成：{novel_path.name} / {fields['model']} / "
-            f"max_tokens={max_tokens} / 提示词={style_label} / 分镜数={node_count}"
+            f"协议={backend_label} / max_tokens={max_tokens} / "
+            f"提示词={style_label} / 分镜数={node_count}"
         )
         if nl_mode:
             self._append_log(
-                "自然语言流水线：三次全新 DeepSeek 对话"
+                "自然语言流水线：三次全新对话"
                 " → 1) 人物一致性  2) 详细概括（保留故事结构与不同姿势）  3) 出 TAG"
             )
 
@@ -452,6 +493,7 @@ class SnapshotApp(tk.Tk):
                     node_count=node_count,
                     on_progress=on_progress,
                     on_step_result=on_step_result,
+                    api_backend=args["api_backend"],
                 )
                 self.after(0, lambda result=result: self._on_generated(result, None))
             except Exception as exc:
@@ -501,8 +543,12 @@ class SnapshotApp(tk.Tk):
             messagebox.showerror("保存失败", str(exc))
             return
         self._set_busy(True, "正在按当前稿件重跑第三步...")
+        backend_label = core.API_BACKEND_LABELS.get(
+            args["resolved_backend"], args["resolved_backend"]
+        )
         self._append_log(
-            f"只跑第三步：{novel_path.name} / {fields['model']} / 分镜数={args['node_count']}"
+            f"只跑第三步：{novel_path.name} / {fields['model']} / "
+            f"协议={backend_label} / 分镜数={args['node_count']}"
         )
         self._append_log("将使用当前「人物一致性」和「故事概括」页的文本，不再读小说原文。")
 
@@ -521,6 +567,7 @@ class SnapshotApp(tk.Tk):
                     max_tokens=args["max_tokens"],
                     node_count=args["node_count"],
                     on_progress=on_progress,
+                    api_backend=args["api_backend"],
                 )
                 self.after(0, lambda result=result: self._on_generated(result, None, step3=True))
             except Exception as exc:
