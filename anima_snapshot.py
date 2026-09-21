@@ -37,6 +37,11 @@ DEFAULT_NOVEL_PATH = ROOT / "samples" / "snapshot_test_excerpt.txt"
 OUTPUT_PATH = ROOT / "test_output_deepseek.md"
 OUTPUT_DIR = ROOT / "outputs"
 INTERMEDIATE_DIR = OUTPUT_DIR / "intermediates"
+RUN_DIR_RE = re.compile(r"^\d{8}_\d{6}(?:_\d+)?$")
+STAGE_CHARACTER_NAME = "1_character.md"
+STAGE_SUMMARY_NAME = "2_summary.md"
+STAGE_TAGS_NAME = "3_tags.md"
+STAGE_SNAPSHOT_NAME = "snapshot.md"
 TEXT_ENCODINGS = ("utf-8-sig", "utf-8", "gb18030", "gbk")
 SSL_CONTEXT = ssl._create_unverified_context()
 DEFAULT_API_URL = "https://api.deepseek.com"
@@ -339,12 +344,13 @@ def build_user_prompt(
     elif style == PROMPT_STYLE_NATURAL:
         prompt_rule = (
             "中文提示词必须是完整画面描述；英文必须是 Anima 混合写法："
-            "标签块（masterpiece, best quality, score_7 + 1girl/1boy + 按人外观服装）空一行后再写短句。"
+            "标签块（masterpiece, best quality, score_7 + 1girl/1boy + 视线互动 + 按人外观服装）空一行后再写短句。"
             "禁止英文散文、snake_case、BREAK、(word:1.2)、looking_at_viewer。"
             "多人同框必须一人一句，主语带外貌锚点，独有特征禁止写成全画面清单。"
             "段首先锁人数：画面里只有 N 个人（N≤3）。每个分镜最多 3 个可识别人物；正文超过 3 人必须拆镜或只留核心 1～3 人，禁止 4 人同框。"
             "禁止用玻璃倒影、married/丈夫/妻子、走廊路人把两人写成三人、三人写成四人。"
-            "多人必须叙事构图：面对面或侧面相对、写清谁看谁，禁止并排看镜头合影，禁止直视镜头。"
+            "多人必须叙事构图：面对面或侧面相对。人数 tag 后立刻写 looking at another / looking at each other / eye contact，"
+            "短句写谁看谁（the girl on the left is looking at the boy）。视线禁止留空，禁止并排看镜头合影，禁止 looking at the viewer。"
             "表情写五官动作，禁止只写微笑/脸红；女性爱按强度用愉悦表情/高潮脸/阿嘿颜等，男色欲用邪笑/得意/坏笑，不要乱加。"
         )
     else:
@@ -367,7 +373,7 @@ def build_user_prompt(
         "防合影：多人禁止看镜头，必须对视或看对方身体，机位用侧面/过肩/面对面，不要正面并排。\n"
         "表情：写五官动作；女性爱按强度选愉悦/高潮/阿嘿颜；男色欲用邪笑/得意/坏笑，禁止一律微笑，禁止乱加。\n"
         "角色必须一眼能分清：正文没写死时，不同人要错开发色、长短发、身材、胡子/眼镜/痣；禁止全员同一张脸。\n"
-        "服装必须写颜色、花纹、面料纹理、剪裁，禁止只写衬衫/裙子/white_shirt。\n\n"
+        "服装必须写颜色、花纹、面料纹理、剪裁；品类从服装语法卡选，禁止只写衬衫/裙子/white_shirt。\n\n"
         f"小说文件名：{novel_name}\n\n"
         "<novel>\n"
         f"{novel}\n"
@@ -410,13 +416,14 @@ def build_nl_tag_user_prompt(
         "中文提示词必须是完整画面描述，一人一句，主语带外貌锚点。"
         "英文提示词必须是 Anima 混合写法：先写小写空格分词的标签块"
         "（masterpiece, best quality, score_7，NSFW 加 explicit，再写 1girl/1boy 和按人分行的外观服装），"
-        "空一行后写 4 到 6 句短英文（构图、左、右、光影、归属）。"
+        "空一行后写 4 到 6 句短英文（构图、谁看谁、左、右、光影、归属）。"
         "禁止把英文写成一篇嵌套从句散文。禁止 snake_case、BREAK、(word:1.2)、looking_at_viewer。"
         "锁定外貌要素写进英文标签段；短句只回锚 2～4 个辨识点，不要把锁定句整段嵌进从句。"
         "段首先锁人数：画面里只有 N 个人（N≤3）。每个分镜最多 3 个可识别人物；"
         "概括超过 3 人必须拆镜或只留核心 1～3 人，禁止 4 人同框。"
         "禁止用玻璃倒影、married/丈夫/妻子、走廊路人把两人写成三人、三人写成四人。"
-        "多人必须叙事构图：面对面或侧面相对、写清谁看谁，禁止并排看镜头合影，禁止直视镜头。"
+        "多人必须叙事构图：面对面或侧面相对。人数 tag 后立刻写 looking at another / looking at each other / eye contact，"
+        "短句写谁看谁（the girl on the left is looking at the boy）。视线禁止留空，禁止并排看镜头合影，禁止 looking at the viewer。"
         "表情写五官动作，禁止只写微笑/脸红；女性爱按强度用愉悦表情/高潮脸/阿嘿颜等，"
         "男色欲用邪笑/得意/坏笑，不要乱加。"
     )
@@ -430,9 +437,10 @@ def build_nl_tag_user_prompt(
         "防串台：禁止把发色、眼镜、服装混成一袋；一人戴眼镜则另一人必须明确不戴。\n"
         "防人数膨胀：每个分镜最多 3 个可识别人物，禁止 4 人同框；在场几人就只写几人；"
         "玻璃/镜子只写光斑不写人物倒影；锁定外貌禁止 married/妻子/丈夫；走廊办公室默认空场。\n"
-        "防合影：多人禁止看镜头，必须对视或看对方身体，机位用侧面/过肩/面对面，不要正面并排。\n"
+        "防合影：多人禁止看镜头。人数 tag 后立刻写 looking at another / looking at each other，"
+        "短句写谁看谁，机位用侧面/过肩/面对面，不要正面并排。\n"
         "表情：写五官动作；女性爱按强度选愉悦/高潮/阿嘿颜；男色欲用邪笑/得意/坏笑，禁止一律微笑，禁止乱加。\n"
-        "服装必须写颜色、花纹、面料纹理、剪裁，禁止只写衬衫/裙子/white_shirt。\n"
+        "服装必须写颜色、花纹、面料纹理、剪裁；品类从服装语法卡选，禁止只写衬衫/裙子/white_shirt。\n"
         "以下材料可能已经过人工修改，一律以本次给定文本为准，不要用旧版记忆。\n\n"
         f"小说文件名：{novel_name}\n\n"
         "<character_bible>\n"
@@ -722,6 +730,63 @@ def chat_completion(
     raise RuntimeError("生成失败：\n" + "\n".join(errors))
 
 
+def make_run_dir() -> Path:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    target = OUTPUT_DIR / stamp
+    extra = 1
+    while target.exists():
+        extra += 1
+        target = OUTPUT_DIR / f"{stamp}_{extra}"
+    target.mkdir(parents=True, exist_ok=False)
+    return target
+
+
+def stage_paths(run_dir: Path) -> tuple[Path, Path, Path]:
+    return (
+        run_dir / STAGE_CHARACTER_NAME,
+        run_dir / STAGE_SUMMARY_NAME,
+        run_dir / STAGE_TAGS_NAME,
+    )
+
+
+def list_run_dirs() -> list[Path]:
+    if not OUTPUT_DIR.exists():
+        return []
+    dirs = [
+        path
+        for path in OUTPUT_DIR.iterdir()
+        if path.is_dir() and RUN_DIR_RE.match(path.name)
+    ]
+    return sorted(dirs, key=lambda path: path.name, reverse=True)
+
+
+def _run_dir_matches_novel(run_dir: Path, novel_path: Path) -> bool:
+    _, _, tags_path = stage_paths(run_dir)
+    if not tags_path.exists():
+        return False
+    try:
+        head = tags_path.read_text(encoding="utf-8")[:4000]
+    except OSError:
+        return False
+    stem = novel_path.stem
+    return stem in head or str(novel_path) in head
+
+
+def find_latest_run_dir(novel_path: Path | None = None) -> Path | None:
+    unmatched_drafts: Path | None = None
+    for run_dir in list_run_dirs():
+        character_path, summary_path, tags_path = stage_paths(run_dir)
+        has_drafts = character_path.exists() and summary_path.exists()
+        if novel_path is not None and tags_path.exists():
+            if _run_dir_matches_novel(run_dir, novel_path):
+                return run_dir
+            continue
+        if has_drafts and unmatched_drafts is None:
+            unmatched_drafts = run_dir
+    return unmatched_drafts
+
+
 def write_output(
     *,
     content: str,
@@ -733,12 +798,18 @@ def write_output(
     prompt_style: str = DEFAULT_PROMPT_STYLE,
     node_count: int = DEFAULT_NODE_COUNT,
     extra_header: list[str] | None = None,
+    run_dir: Path | None = None,
 ) -> Path:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    target = output_path or (OUTPUT_DIR / f"{novel_path.stem}_{stamp}.md")
     style = normalize_prompt_style(prompt_style)
     count = normalize_node_count(node_count)
+    if output_path is None:
+        dest = run_dir or make_run_dir()
+        dest.mkdir(parents=True, exist_ok=True)
+        filename = STAGE_TAGS_NAME if style == PROMPT_STYLE_NATURAL else STAGE_SNAPSHOT_NAME
+        target = dest / filename
+    else:
+        target = output_path
+        target.parent.mkdir(parents=True, exist_ok=True)
     header = [
         "# 小说节点快照",
         "",
@@ -746,6 +817,7 @@ def write_output(
         f"- 小说: `{novel_path}`",
         f"- 提示词类型: `{PROMPT_STYLE_LABELS[style]}` ({style})",
         f"- 分镜数: `{count}`",
+        f"- 输出目录: `{target.parent}`",
         *(extra_header or []),
         f"- prompt_tokens: {usage.get('prompt_tokens', '未知')}",
         f"- completion_tokens: {usage.get('completion_tokens', '未知')}",
@@ -765,8 +837,14 @@ def write_output(
     return target
 
 
-def nl_draft_paths(novel_path: Path) -> tuple[Path, Path]:
-    INTERMEDIATE_DIR.mkdir(parents=True, exist_ok=True)
+def nl_draft_paths(
+    novel_path: Path,
+    run_dir: Path | None = None,
+) -> tuple[Path, Path]:
+    dest = run_dir or find_latest_run_dir(novel_path)
+    if dest is not None:
+        character_path, summary_path, _ = stage_paths(dest)
+        return character_path, summary_path
     stem = novel_path.stem
     return (
         INTERMEDIATE_DIR / f"{stem}_character.md",
@@ -774,14 +852,26 @@ def nl_draft_paths(novel_path: Path) -> tuple[Path, Path]:
     )
 
 
-def write_nl_character_draft(novel_path: Path, character_bible: str) -> Path:
-    character_path, _ = nl_draft_paths(novel_path)
+def write_nl_character_draft(
+    novel_path: Path,
+    character_bible: str,
+    run_dir: Path | None = None,
+) -> Path:
+    dest = run_dir or make_run_dir()
+    character_path, _, _ = stage_paths(dest)
+    dest.mkdir(parents=True, exist_ok=True)
     character_path.write_text(character_bible.strip() + "\n", encoding="utf-8")
     return character_path
 
 
-def write_nl_summary_draft(novel_path: Path, summary: str) -> Path:
-    _, summary_path = nl_draft_paths(novel_path)
+def write_nl_summary_draft(
+    novel_path: Path,
+    summary: str,
+    run_dir: Path | None = None,
+) -> Path:
+    dest = run_dir or make_run_dir()
+    _, summary_path, _ = stage_paths(dest)
+    dest.mkdir(parents=True, exist_ok=True)
     summary_path.write_text(summary.strip() + "\n", encoding="utf-8")
     return summary_path
 
@@ -790,10 +880,12 @@ def write_nl_drafts(
     novel_path: Path,
     character_bible: str,
     summary: str,
+    run_dir: Path | None = None,
 ) -> tuple[Path, Path]:
+    dest = run_dir or make_run_dir()
     return (
-        write_nl_character_draft(novel_path, character_bible),
-        write_nl_summary_draft(novel_path, summary),
+        write_nl_character_draft(novel_path, character_bible, run_dir=dest),
+        write_nl_summary_draft(novel_path, summary, run_dir=dest),
     )
 
 
@@ -857,6 +949,7 @@ def generate_nl_tag_from_materials(
     novel_chars: int = 0,
     extra_system_chars: int = 0,
     api_backend: str | None = None,
+    run_dir: Path | None = None,
 ) -> dict:
     bible = character_bible.strip()
     plot = summary.strip()
@@ -866,7 +959,8 @@ def generate_nl_tag_from_materials(
         raise ValueError("故事概括不能为空")
     count = normalize_node_count(node_count)
     tag_system = render_system_prompt(load_text(prompt_path_for(PROMPT_STYLE_NATURAL)), count)
-    character_path, summary_path = write_nl_drafts(novel_path, bible, plot)
+    dest = run_dir or make_run_dir()
+    character_path, summary_path = write_nl_drafts(novel_path, bible, plot, run_dir=dest)
     nodes, usage_tag = run_chat_step(
         step_name="根据当前人物一致性和故事概括出 TAG（新对话）",
         api_url=api_url,
@@ -886,6 +980,7 @@ def generate_nl_tag_from_materials(
         f"- 流水线: `{pipeline_label}`",
         f"- 人物一致性稿: `{character_path}`",
         f"- 故事概括稿: `{summary_path}`",
+        f"- 第三步 TAG: `{dest / STAGE_TAGS_NAME}`",
     ]
     if prior_usages:
         for index, step_usage in enumerate(prior_usages, start=1):
@@ -907,7 +1002,7 @@ def generate_nl_tag_from_materials(
         )
     emit_progress(on_progress, "正在写入结果文件...")
     output_path = write_output(
-        content=content,
+        content=nodes.strip(),
         novel_path=novel_path,
         model=model,
         usage=usage,
@@ -915,12 +1010,14 @@ def generate_nl_tag_from_materials(
         prompt_style=PROMPT_STYLE_NATURAL,
         node_count=count,
         extra_header=extra_header,
+        run_dir=dest,
     )
     return {
         "content": content,
         "usage": usage,
         "report": report,
         "output_path": output_path,
+        "run_dir": dest,
         "truncated": truncated,
         "novel_chars": novel_chars,
         "system_chars": extra_system_chars + len(tag_system),
@@ -953,6 +1050,7 @@ def generate_nl_three_step_snapshot(
     count = normalize_node_count(node_count)
     character_system = render_system_prompt(load_text(NL_CHARACTER_PROMPT_PATH))
     summary_system = render_system_prompt(load_text(NL_SUMMARY_PROMPT_PATH))
+    run_dir = make_run_dir()
 
     character_bible, usage_1 = run_chat_step(
         step_name="第 1/3 步：从小说提取人物一致性（新对话）",
@@ -965,7 +1063,7 @@ def generate_nl_three_step_snapshot(
         on_progress=on_progress,
         api_backend=api_backend,
     )
-    write_nl_character_draft(novel_path, character_bible)
+    write_nl_character_draft(novel_path, character_bible, run_dir=run_dir)
     if on_step_result is not None:
         on_step_result("character", character_bible)
 
@@ -980,7 +1078,7 @@ def generate_nl_three_step_snapshot(
         on_progress=on_progress,
         api_backend=api_backend,
     )
-    write_nl_summary_draft(novel_path, summary)
+    write_nl_summary_draft(novel_path, summary, run_dir=run_dir)
     if on_step_result is not None:
         on_step_result("summary", summary)
 
@@ -1000,6 +1098,7 @@ def generate_nl_three_step_snapshot(
         novel_chars=len(novel),
         extra_system_chars=len(character_system) + len(summary_system),
         api_backend=api_backend,
+        run_dir=run_dir,
     )
     result["pipeline"] = "nl_three_step"
     return result
@@ -1054,6 +1153,7 @@ def generate_snapshot(
     content = extract_content(result)
     usage = normalize_usage(result.get("usage") or {})
     report = evaluate(content, style, count)
+    run_dir = make_run_dir()
     output_path = write_output(
         content=content,
         novel_path=novel_path,
@@ -1062,12 +1162,14 @@ def generate_snapshot(
         report=report,
         prompt_style=style,
         node_count=count,
+        run_dir=run_dir,
     )
     return {
         "content": content,
         "usage": usage,
         "report": report,
         "output_path": output_path,
+        "run_dir": run_dir,
         "truncated": truncated,
         "novel_chars": len(novel),
         "system_chars": len(system_prompt),

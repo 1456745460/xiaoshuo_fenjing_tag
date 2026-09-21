@@ -225,7 +225,8 @@ class SnapshotApp(tk.Tk):
             f"5. 填写分镜数（{core.MIN_NODE_COUNT} 到 {core.MAX_NODE_COUNT}，生成固定数量）\n"
             "6. 选择 txt 小说，点「开始生成」\n"
             "7. 自然语言生成后，可在「人物一致性」「故事概括」页直接改稿，再点「只跑第三步出 TAG」\n"
-            "8. 完成后会自动打开生成的 md，也可点「打开文件所在目录」\n",
+            "8. 完成后会自动打开生成的 md，也可点「打开文件所在目录」\n"
+            "   每次生成会新建 outputs/年月日时分秒/，自然语言写入 1_character.md、2_summary.md、3_tags.md\n",
         )
         self.log.configure(state=tk.DISABLED)
 
@@ -504,7 +505,7 @@ class SnapshotApp(tk.Tk):
     def save_drafts(self) -> tuple[Path, Path] | None:
         raw = self.novel_path.get().strip()
         if not raw:
-            messagebox.showwarning("缺少参数", "请先选择 txt 小说文件，中间稿按小说名保存")
+            messagebox.showwarning("缺少参数", "请先选择 txt 小说文件")
             return None
         try:
             novel_path = core.resolve_novel_path(raw)
@@ -537,11 +538,6 @@ class SnapshotApp(tk.Tk):
             return
         fields = args["fields"]
         novel_path = args["novel_path"]
-        try:
-            core.write_nl_drafts(novel_path, character, summary)
-        except OSError as exc:
-            messagebox.showerror("保存失败", str(exc))
-            return
         self._set_busy(True, "正在按当前稿件重跑第三步...")
         backend_label = core.API_BACKEND_LABELS.get(
             args["resolved_backend"], args["resolved_backend"]
@@ -608,6 +604,8 @@ class SnapshotApp(tk.Tk):
             self._set_editor(self.summary_text, str(result["summary"]))
         self._sync_nl_controls()
         self._append_log("\n".join(result["report"]))
+        if result.get("run_dir"):
+            self._append_log(f"输出目录: {result['run_dir']}")
         self._append_log(f"已写入: {output_path}")
         if result.get("character_path"):
             self._append_log(f"人物一致性稿: {result['character_path']}")

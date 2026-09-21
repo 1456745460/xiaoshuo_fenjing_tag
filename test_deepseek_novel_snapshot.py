@@ -43,11 +43,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--character",
-        help="人物一致性稿路径。省略则读取 outputs/intermediates/<小说名>_character.md",
+        help="人物一致性稿路径。省略则读取最近一次 outputs/年月日时分秒/1_character.md",
     )
     parser.add_argument(
         "--summary",
-        help="故事概括稿路径。省略则读取 outputs/intermediates/<小说名>_summary.md",
+        help="故事概括稿路径。省略则读取最近一次 outputs/年月日时分秒/2_summary.md",
     )
     parser.add_argument(
         "--backend",
@@ -196,6 +196,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print("\n".join(result["report"]))
+    if result.get("run_dir"):
+        print(f"输出目录: {result['run_dir']}")
     print(f"完整输出已写入: {result['output_path']}")
     if result.get("character_path"):
         print(f"人物一致性稿: {result['character_path']}")

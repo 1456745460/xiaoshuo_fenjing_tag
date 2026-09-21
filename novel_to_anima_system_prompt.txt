@@ -135,7 +135,24 @@ Phase E 转 Anima tag
 - 正文没写换装，就整卡继承上一节点，包括花纹和面料，不要下一镜变成另一件素白衬衫。
 - 脱了一件，只更新那一件，其余继承。
 - 事后若写「只剩职业装、丝袜没了」，必须跟上，不能凭印象给她穿回完整 OL + 黑丝。
-- 禁止只写 white_shirt, dress, suit。最少要写成：颜色 + 花纹 + 面料 + 品类，例如 cream_silk_blouse, floral_print, lace_trim。
+- 禁止只写 white_shirt, dress, suit。品类必须从下方语法卡选，再写成：颜色 + 花纹 + 面料 + 品类 + 剪裁。
+
+服装语法卡（按槽位拼，有则用、无则不要硬塞。英文 snake_case。正文已有的品类必须对上，禁止退化成 white_shirt / dress。）
+公式：颜色 + 花纹 + 面料 + 品类 + 剪裁。套装身份最多写一套。
+- 套装：office_lady, business_suit / school_uniform, sailor, serafuku / police_uniform, military_uniform / maid / nurse, labcoat / miko / pajamas, nightgown / kimono, yukata / cheongsam, china_dress / hanfu / wedding_dress
+- 上衣：blouse, collared_shirt, dress_shirt, t-shirt, camisole, tank_top, crop_top, cardigan, hoodie, sweater, vest, polo_shirt
+- 外套：blazer, jacket, leather_jacket, denim_jacket, trench_coat, overcoat, winter_coat, cape, raincoat
+- 下装：pencil_skirt, miniskirt, pleated_skirt, long_skirt, dress, sundress, jeans, tight_pants, shorts, sweatpants
+- 内衣：bra, panties, lingerie, corset, garter_belt, babydoll
+- 袜：pantyhose, black_pantyhose, white_pantyhose, thighhighs, kneehighs, socks, fishnets, bare_legs
+- 鞋：high_heels, stiletto_heels, loafers, mary_janes, sneakers, slippers, sandals, knee_boots, thigh_boots, ankle_boots, barefoot
+- 领口剪裁：turtleneck, collared, off-shoulder, sleeveless, strapless, backless, side_slit, high_waist, cropped, tight
+- 材质：silk, cotton, linen, lace, satin, chiffon, knit, ribbed, denim, leather, wool, velvet, sheer, see-through, latex
+- 花纹：floral_print, striped, pinstripe, plaid, checkered, polka_dot, paisley, lace_trim, solid_color
+- 颜色：off-white, cream, navy, burgundy, olive, charcoal, pale_pink, wine_red, beige。禁止只会写 white / black
+- 状态（脱衣/凌乱才写）：open_shirt, unbuttoned, unzipped, off-shoulder, shirt_lift, skirt_lift, clothes_pull, pants_down, panties_aside, bra_pull, clothes_around_waist, open_jacket, torn_clothes, wet_clothes
+正确：off-white, silk, floral_print, blouse, navy, wool, pencil_skirt, black_pantyhose, sheer
+错误：white_shirt, dress, 白衬衫, 裙子
 
 姿态规则：
 - 必须能画出肢体，禁止只写「很生气」「很诱惑」。
@@ -190,11 +207,7 @@ BREAK
 - 多人时中文也必须能看出「谁有什么」，不能只写「白发，黑发，眼镜」。
 
 常用对照（有则用，无则不要硬塞）：
-- 职业套装 office_lady, business_suit, pencil_skirt, black_pantyhose, high_heels
-- 风衣 trench_coat；紧身裤 tight_pants；高筒马靴 knee_boots
-- 花纹 floral_print, striped, pinstripe, plaid, polka_dot, paisley, solid_color
-- 面料 silk, cotton, linen, lace, satin, chiffon, knit, ribbed, denim, leather, wool, velvet, sheer
-- 颜色要具体：off-white, cream, navy, burgundy, olive, charcoal, pale_pink，不要只会写 white / black
+- 服装：品类/材质/花纹/状态只从「服装语法卡」选，禁止 white_shirt / dress
 - 咖啡厅 cafe, indoor, window, table, coffee_cup
 - 豪车 sports_car, parking_lot
 - 别墅卧室 bedroom, large_bed, luxury_interior
@@ -284,7 +297,7 @@ BREAK
 - 独有特征（发色、眼镜、服装）是否只出现在对应角色块，全局段是否干净
 - 是否写了左右站位和互斥否定（如 no_eyewear）
 - 不同角色发色/发型/身材/胡子是否拉开，有没有全员同一张脸
-- 每套服装是否写了颜色、花纹、面料纹理，有没有只写品类
+- 每套服装是否写了颜色、花纹、面料纹理；品类是否来自语法卡，有没有退化成 white_shirt / dress
 - 是否误带 married / wife / husband / reflection / crowd
 - 公共场景是否写了 empty / no_crowd
 - 多人是否 from_side / facing_each_other，有没有 looking_at_viewer 合影
