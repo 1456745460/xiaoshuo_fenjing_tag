@@ -28,7 +28,7 @@
 9. 皮肤默认自然肤质、无油光。除非概括明确写到油光、汗湿、水淋，否则禁止写成油亮皮肤 / oily skin / wet skin。
 10. 禁止空泛词：美丽、性感、精致、beautiful, sexy, detailed, gorgeous。把笔墨用在发色、五官、衣服、肢体、光影上。
 11. 英文标签必须小写、空格分词（`long black hair`，不是 `long_black_hair`）。`score_7` 是唯一保留下划线的例外。人数必须用 `1girl` / `1boy` 锚点。禁止 snake_case，禁止 `BREAK`（那是纯 Danbooru 模式）。禁止 `looking_at_viewer` / `looking at the viewer`。视线禁止留空：不写则模型常默认 looking at viewer。单人写 looking to the side / looking down / looking away / looking afar，不要看镜头。多人人数 tag 后立刻写 looking at another 或 looking at each other / eye contact，短句再写谁看谁。中文仍写「一名年轻女性」，不要把 `1girl` 写进中文。
-12. 多人同框必须防串台。发色、眼镜、服装必须绑在明确主语上。中文每人一句，主语用外貌锚点。英文标签按人分行，自然语言用 on the left / on the right / the woman / the man 回锚，文末再写「某某特征只属于某人」。
+12. 多人同框必须防串台。发色、眼镜、服装必须绑在明确主语上。中文每人一句，主语用外貌锚点。英文标签按人分行，自然语言用 on the left / on the right / the woman / the man 回锚，文末再写「某某特征只属于某人」。单人场景禁止防串站位：禁止 on the left / on the right / on_the_left / on_the_right / 画面左侧 / 画面右侧。Anima 看到左右站位会当成两个人。
 13. 不同角色必须一眼能分清。以外貌档案为准；档案已拉开的发色、发型、身材、胡子/眼镜/痣禁止改回同一张脸。
 14. 服装禁止只有品类。每件衣服必须写颜色、花纹/图案、面料纹理、剪裁松紧；禁止只写「白衬衫」「裙子」。
 15. 人数必须锁死，禁止膨胀。在场几人就只画几人。两人镜头禁止画成三人，三人镜头禁止画成四人。禁止把玻璃/镜子倒影、婚姻关系（丈夫/妻子/married）、走廊路人、照片或屏幕里的脸写成额外的人。中文段首先写「画面里只有 N 个人」；英文标签用精确人数，自然语言写 only N people。
@@ -71,7 +71,7 @@ Phase C 逐节点冻结当时状态
 
 Phase D 转 Anima 提示词
 - 中文：按「一人一句、特征跟主语」写成可出图段落。近景必须嵌入锁定中文外貌。
-- 英文：先把锁定外貌和此刻服装收成标签块；人数 tag 后立刻写视线/互动，再写短句描述构图、谁看谁、左右位置、动作、光影。禁止散文。
+- 英文：先把锁定外貌和此刻服装收成标签块；人数 tag 后立刻写视线/互动，再写短句描述构图、谁看谁、动作、光影。多人再写左右位置；单人禁止 on the left / on the right。禁止散文。
 
 ========================
 三、如何使用已给定的角色一致性档案
@@ -111,7 +111,7 @@ Phase D 转 Anima 提示词
   接触：谁碰谁、手在哪、身体重叠
 - 表情与目光：每人必须写目光落点（对视对方眼睛 / 盯着对方胸口 / 低头看结合处 / 看向门口 / 闭眼 / 斜睨），禁止直视镜头。表情写五官动作，禁止只写微笑/脸红/平静
 - 镜头：人数构图、机位、景别、角度。多人默认侧面、过肩、四分之三侧面、面对面。人数必须等于「在场人物」列表，先写「正好 N 人」（N≤3）
-- 防串站位：谁在左/中/右、谁在前/后；谁的脸/躯干朝向谁；独有特征分别属于谁
+- 防串站位：单人必须写「单人无需防串站位」，禁止写左/中/右。多人写谁在左/中/右、谁在前/后；谁的脸/躯干朝向谁；独有特征分别属于谁
 - 光影/材质/前景：玻璃/镜子/水面只写光斑和材质，禁止写人脸倒影。公共场所除非概括有路人入画，否则写空无他人
 - 中文提示词：（一段连续中文；多人必须一人一句）
 - 英文提示词：（混合块：标签行 + 空行 + 短句。不要一篇散文）
@@ -177,16 +177,25 @@ Phase D 转 Anima 提示词
 
 【空一行】
 
-【短句自然语言】4 到 6 句，每句只承载一个主要信息。顺序固定：
+【短句自然语言】每句只承载一个主要信息。单人 3 到 4 句，多人 4 到 6 句。
+
+单人节点（禁止左右站位）：
+1. 构图句：景别、室内外、only one person、机位、不看镜头
+2. 视线句：此人看哪里。例：The young woman is looking to the side, not at the camera.
+3. 此人：短回锚（发色+1 个标志）+ 姿势 + 表情五官 + 目光。用 the woman / the man / the girl，禁止 on the left / on the right / in the center-left / in the center-right。
+4. 光影/前景句。道具方位用 beside the door / near the window / in the foreground，禁止写成「人在右、门在左」。
+
+多人节点（才允许左右站位）：
 1. 构图句：景别、室内外、人数、机位（from side / three-quarter view / profile）、谁也不看镜头
 2. 视线句：谁看谁。例：The girl on the left is looking at the boy, the boy is looking back at her. / Characters focused on each other rather than looking at the camera, candid interaction.
-3. 左侧/主体的人：短回锚（发色+1 个标志）+ 姿势 + 表情五官 + 目光落点
-4. 右侧/另一人：同样短回锚 + 姿势 + 接触/动作 + 表情目光
+3. 左侧的人：短回锚（发色+1 个标志）+ 姿势 + 表情五官 + 目光落点
+4. 右侧的人：同样短回锚 + 姿势 + 接触/动作 + 表情目光
 5. 光影/前景句（互动已写清就不要再复述）
 6. 归属句：The long black hair and white stockings belong only to the woman; the stubble and heavy build belong only to the man.
 
-短句必须用明确空间词：on the left, on the right, lying on her back, kneeling, holding the backs of her knees。
-指代必须重复 the woman / the man / the girl on the left，少用 she/he。
+多人短句必须用明确空间词：on the left, on the right, lying on her back, kneeling, holding the backs of her knees。
+多人指代可重复 the woman / the man / the girl on the left，少用 she/he。
+单人只用 the woman / the man / the girl，禁止任何左右站位词。
 禁止把外观、服装、动作、表情塞进同一个超长从句。
 禁止 `(word:1.2)`、`(word:2)` 加权。Anima 会把括号当字面文本。
 禁止 BREAK。禁止 snake_case。禁止 looking_at_viewer / looking at the viewer。
@@ -210,8 +219,24 @@ On the right a burly middle-aged man with short black hair and stubble kneels, b
 Warm yellow bedside lamp light from the side, rumpled sheets in the foreground, a thin line of cool night light through the curtain gap.
 The long black hair and white stockings belong only to the woman; the stubble and heavy build belong only to the man.
 
-中文对应（保持短句+左右归属，不要写成标签）：
+中文对应（多人保持短句+左右归属，不要写成标签）：
 室内侧面中景，画面里只有两个人，一男一女，卧室空无他人，谁也不看镜头。左侧女性双眼半闭低头，右侧男性低头看两人结合处，各自专注当下动作。画面左侧仰躺的是一名黑色长直发的年轻女性，黑瞳，体态丰满圆润，乳房丰满坚挺，屁股圆润上翘，双腿修长笔直，皮肤雪白细腻，不戴眼镜，此刻仅穿白色半透明尼龙丝袜，蕾丝花边袜口贴身，双乳完全裸露随呼吸轻晃，黑亮浓密阴毛在雪白双腿间格外显眼，长发披散在枕上，眉头轻蹙，唇瓣微张，脸颊泛红，一条裹白丝袜的腿被抬起。画面右侧跪坐的是一名黑色短发的中年魁梧男性，黑瞳，国字脸，浓眉，络腮胡茬，喉结突出，肩宽背厚，体型壮实，不戴眼镜，全身赤裸，双手托住她的腿弯，躯干前倾，阴茎缓慢插入她体内抽送，嘴角上挑露出淫笑。黑长发与白丝袜只属于这名女性，络腮胡茬与魁梧体格只属于这名男性。床头灯暖黄侧光，床单褶皱在前景，窗帘缝隙透进一线夜色冷光。
+
+单人正确示例（禁止 on the left / on the right）：
+masterpiece, best quality, score_7, explicit,
+1girl, looking to the side, from side, three-quarter view,
+black hair just past shoulders, straight hair, deep black eyes, plump curvy body, large firm breasts, fair smooth skin, no glasses,
+completely nude,
+
+Indoor three-quarter medium shot, bedroom at night, only one person, no one else, unaware of the camera, candid.
+The young woman is looking to the side, not at the camera.
+A young woman with black hair just past her shoulders stands nude, eyes half closed, lips parted, one hand resting on her hip.
+Warm yellow lamp light from the side, rumpled sheets in the foreground.
+
+单人错误示例（禁止输出，Anima 会画成两人）：
+On the right a young woman with black hair stands nude.
+In the center-left a young woman stands by the mirror.
+The girl on the left is looking down.
 
 标签转换规则（从锁定英文外貌收标签）：
 - 错误：a young woman with long straight black hair, black eyes, a plump curvy figure
@@ -236,8 +261,8 @@ The long black hair and white stockings belong only to the woman; the stubble an
 文生图模型看到倒影、婚姻词、公共场所，就会多画一个人。
 
 1. 标签人数必须精确，短句再锁一次。
-   - 单人：1girl 或 1boy + only one person, empty scene, no other people
-   - 双人：1girl, 1boy + only two people, no one else
+   - 单人：1girl 或 1boy + only one person, empty scene, no other people。禁止 on the left / on the right / 画面左侧 / 画面右侧，状态表写「单人无需防串站位」
+   - 双人：1girl, 1boy + only two people, no one else。此时才用 on the left / on the right
    - 三人：对应人数 tag + only three people, no fourth person
 2. 公共空间默认空场。学校走廊、教室、办公室、餐厅、街道，除非概括明确有路人入画，否则必须写 empty corridor / empty office / no bystanders。禁止为了热闹补围观群众。
 3. 禁止把反射当成人。
@@ -260,7 +285,8 @@ The long black hair and white stockings belong only to the woman; the stubble an
 2. 目光（禁止留空；不写则模型常补 looking at viewer。单人默认会加看镜头，多人虽不强制，但你必须主动指定）：
    标签紧跟人数：looking at another；对视 looking at each other / eye contact；其余 looking to the side, looking away, looking down, looking up, looking afar。
    朝向：profile, from side, three-quarter view, facing away, from behind。
-   短句立刻写谁看谁：the girl on the left is looking at the boy, the boy is looking back at her / characters focused on each other rather than looking at the camera, candid / one character looking at the other while the second looks down at the table / unaware of the camera, focused on their own actions, non-staged realism。
+   多人短句立刻写谁看谁：the girl on the left is looking at the boy, the boy is looking back at her / characters focused on each other rather than looking at the camera, candid / one character looking at the other while the second looks down at the table / unaware of the camera, focused on their own actions, non-staged realism。
+   单人短句只写此人看哪里：The young woman is looking to the side, not at the camera。禁止 the girl on the left。
    禁止 looking at the camera, looking at the viewer, 直视镜头。
 3. 女表情库（按强度选 2 到 4 个，禁止全堆，禁止日常乱加）。
    - 日常/对峙：似笑非笑、眼含雾、薄怒、窘迫、咬唇、侧目
@@ -309,6 +335,7 @@ On the right the young woman angles her body toward him, brows faintly drawn, li
 - 哪些是推断项
 - 每个节点在场人物是否 ≤3；有没有 4 人同框
 - 多人是否一人一句/一行、左右站位是否写清
+- 单人是否误加了 on the left / on the right / 画面左/右侧；单人防串站位是否写「单人无需防串站位」
 - 独有特征是否只跟对应的人，文末是否有「只属于」归属句
 - 每套服装是否写了颜色、花纹、面料纹理；品类是否来自语法卡，有没有退化成 white shirt / dress
 - 是否误带 married / 已婚 / 丈夫 / 妻子
@@ -337,6 +364,7 @@ On the right the young woman angles her body toward him, brows faintly drawn, li
 - 禁止用玻璃反光、镜子倒影、水面人影把人数加一。
 - 禁止在锁定外貌句和节点提示词里写 married / wife / husband / 已婚 / 丈夫 / 妻子 / 新婚。
 - 禁止单个节点出现 4 个及以上可识别人物。
+- 禁止单人场景写防串站位。禁止 on the left / on the right / on_the_left / on_the_right / 画面左侧 / 画面右侧。
 - 禁止在走廊、办公室、餐厅里自动补路人、学生、围观同事。
 - 禁止多人正面并排合影。禁止直视镜头、看向观众。禁止视线留空；多人必须主动指定 looking at another 或具体落点。
 - 禁止表情只写微笑/脸红/平静。禁止日常镜头乱加阿嘿颜/翻白眼。禁止所有男人都邪笑，也禁止色欲场景的男人只写普通微笑。
