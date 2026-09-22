@@ -336,7 +336,7 @@ def build_user_prompt(
             "必须先写全书风格锁定句（2D anime still frame, modern TV anime cel, visible linework, cel-shaded 等），再写机位/人数，再按人写锁定外貌+此刻服装动作，再写场景、主光、赛璐璐阴影。"
             "禁止 photoreal / live-action / cinematic still / 35mm / film grain。禁止 Danbooru tag、snake_case、BREAK、1girl、solo。中文提示词信息对齐，供阅读；出图只贴英文。"
             "人数用肯定句：frame holds only N people（N≤3）。不要堆 no crowd / no bystanders 否定清单。"
-            "单人禁止 On the left / On the right / Close on the right，左右站位只给多人。"
+            "单人、双人禁止 On the left / On the right / Close on the right，左右站位只给三人。"
             "每个分镜最多 3 个可识别人物；正文超过 3 人必须拆镜或只留核心 1～3 人，禁止 4 人同框。"
             "禁止用玻璃倒影、married/丈夫/妻子、走廊路人把人数加一。"
             "多人必须叙事构图：过肩/侧面/面对面，写清谁看谁，禁止并排看镜头，禁止 looking at the camera。"
@@ -351,16 +351,18 @@ def build_user_prompt(
             "段首先锁人数：画面里只有 N 个人（N≤3）。每个分镜最多 3 个可识别人物；正文超过 3 人必须拆镜或只留核心 1～3 人，禁止 4 人同框。"
             "禁止用玻璃倒影、married/丈夫/妻子、走廊路人把两人写成三人、三人写成四人。"
             "多人必须叙事构图：面对面或侧面相对。人数 tag 后立刻写 looking at another / looking at each other / eye contact，"
-            "短句写谁看谁（the girl on the left is looking at the boy）。视线禁止留空，禁止并排看镜头合影，禁止 looking at the viewer。"
-            "单人禁止防串站位：禁止 on the left / on the right / 画面左侧 / 画面右侧，Anima 会当成两人。"
+            "双人短句写谁看谁（the woman is looking at the boy）；三人才写 the girl on the left is looking at the boy。"
+            "视线禁止留空，禁止并排看镜头合影，禁止 looking at the viewer。"
+            "左右身份句只给三人：On the left, boy / On the right, lean young man，站位后逗号，身份前禁止 a / an / the。"
+            "单人、双人直接写身份，禁止 on the left / on the right / 画面左侧 / 画面右侧，Anima 会把人数算错。"
             "表情写五官动作，禁止只写微笑/脸红；女性爱按强度用愉悦表情/高潮脸/阿嘿颜等，男色欲用邪笑/得意/坏笑，不要乱加。"
         )
     else:
         prompt_rule = (
             "每个节点的中文提示词和英文提示词必须完整、可直接用于 Anima 文生图。"
             "英文必须是 Danbooru / snake_case tag，逗号分隔，禁止写成自然语言句子。"
-            "多人同框必须用 BREAK 分角色块，独有特征禁止写进全局段，并写清左右站位和互斥项。"
-            "单人禁止 on_the_left / on_the_right / in_the_center，Anima 会当成两人。"
+            "多人同框必须用 BREAK 分角色块，独有特征禁止写进全局段，并写清互斥项。"
+            "单人、双人禁止 on_the_left / on_the_right / in_the_center；左右站位只给三人。"
             "人数 tag 必须精确，且每镜最多 3 人；正文超过 3 人必须拆镜或只留核心 1～3 人，禁止 4girls / multiple_girls 群像。"
             "禁止 reflection / married / wife / husband / crowd 把人数加一；公共场景补 empty, no_crowd。"
             "多人必须 from_side / facing_each_other / looking_at_another，禁止 looking_at_viewer 合影。"
@@ -372,7 +374,7 @@ def build_user_prompt(
         f"但{prompt_rule}\n"
         "必须先给角色一致性档案，再给节点。不要寒暄，不要解释用法。\n"
         "防串台：禁止把发色、眼镜、服装混成一袋；一人戴眼镜则另一人必须明确不戴。\n"
-        "单人禁止防串站位：不要写 on the left / on the right / on_the_left / on_the_right / 画面左/右侧。\n"
+        "单人、双人禁止左右站位：不要写 on the left / on the right / on_the_left / on_the_right / 画面左/右侧。左右身份句只给三人。\n"
         "防人数膨胀：每个分镜最多 3 个可识别人物，禁止 4 人同框；在场几人就只写几人；玻璃/镜子只写光斑不写人物倒影；锁定外貌禁止 married/妻子/丈夫；走廊办公室默认空场。\n"
         "防合影：多人禁止看镜头，必须对视或看对方身体，机位用侧面/过肩/面对面，不要正面并排。\n"
         "表情：写五官动作；女性爱按强度选愉悦/高潮/阿嘿颜；男色欲用邪笑/得意/坏笑，禁止一律微笑，禁止乱加。\n"
@@ -420,15 +422,21 @@ def build_nl_tag_user_prompt(
         "中文提示词必须是完整画面描述，一人一句，主语带外貌锚点。"
         "英文提示词必须是 Anima 混合写法：先写小写空格分词的标签块"
         "（masterpiece, best quality, score_7，NSFW 加 explicit，再写 1girl/1boy 和按人分行的外观服装），"
-        "空一行后写短英文：单人 3 到 4 句（构图、看哪里、此人、光影），多人 4 到 6 句（构图、谁看谁、左、右、光影、归属）。"
+        "空一行后写短英文：单人 3 到 4 句（构图、看哪里、此人、光影），"
+        "双人 4 到 6 句（构图、谁看谁、此人、彼人、光影、归属），"
+        "三人 4 到 6 句（构图、谁看谁、左、右、光影、归属）。"
         "禁止把英文写成一篇嵌套从句散文。禁止 snake_case、BREAK、(word:1.2)、looking_at_viewer。"
         "锁定外貌要素写进英文标签段；短句只回锚 2～4 个辨识点，不要把锁定句整段嵌进从句。"
         "段首先锁人数：画面里只有 N 个人（N≤3）。每个分镜最多 3 个可识别人物；"
         "概括超过 3 人必须拆镜或只留核心 1～3 人，禁止 4 人同框。"
         "禁止用玻璃倒影、married/丈夫/妻子、走廊路人把两人写成三人、三人写成四人。"
-        "单人禁止防串站位：禁止 on the left / on the right / 画面左侧 / 画面右侧，Anima 会当成两人。"
+        "单人、双人禁止防串站位：禁止 on the left / on the right / 画面左侧 / 画面右侧，Anima 会把人数算错。"
         "多人必须叙事构图：面对面或侧面相对。人数 tag 后立刻写 looking at another / looking at each other / eye contact，"
-        "短句写谁看谁（the girl on the left is looking at the boy）。视线禁止留空，禁止并排看镜头合影，禁止 looking at the viewer。"
+        "双人短句写谁看谁（the woman is looking at the boy）；三人才写 the girl on the left is looking at the boy。"
+        "视线禁止留空，禁止并排看镜头合影，禁止 looking at the viewer。"
+        "左右身份句只给三人，写成 On the left, boy / On the right, lean young man："
+        "站位后立刻逗号，身份用无冠词标签，禁止 On the left a young woman / On the right a lean young man。"
+        "单人、双人直接写 Young woman, [action] / Lean young man, [action]。"
         "表情写五官动作，禁止只写微笑/脸红；女性爱按强度用愉悦表情/高潮脸/阿嘿颜等，"
         "男色欲用邪笑/得意/坏笑，不要乱加。"
     )
@@ -440,11 +448,12 @@ def build_nl_tag_user_prompt(
         "不要再输出角色一致性档案，不要再输出小说概括。直接从节点目录写起。\n"
         "概括里的不同爱情姿势、不同爱情经过必须尽量用不同节点覆盖，禁止合并省略。\n"
         "防串台：禁止把发色、眼镜、服装混成一袋；一人戴眼镜则另一人必须明确不戴。\n"
-        "单人禁止防串站位：不要写 on the left / on the right / 画面左/右侧。\n"
+        "单人、双人禁止左右站位：不要写 on the left / on the right / 画面左/右侧。\n"
         "防人数膨胀：每个分镜最多 3 个可识别人物，禁止 4 人同框；在场几人就只写几人；"
         "玻璃/镜子只写光斑不写人物倒影；锁定外貌禁止 married/妻子/丈夫；走廊办公室默认空场。\n"
         "防合影：多人禁止看镜头。人数 tag 后立刻写 looking at another / looking at each other，"
         "短句写谁看谁，机位用侧面/过肩/面对面，不要正面并排。\n"
+        "三人左右身份句：On the left, boy / On the right, lean young man。站位后逗号，禁止 a / an。单人、双人直接写身份。\n"
         "表情：写五官动作；女性爱按强度选愉悦/高潮/阿嘿颜；男色欲用邪笑/得意/坏笑，禁止一律微笑，禁止乱加。\n"
         "服装必须写颜色、花纹、面料纹理、剪裁；品类从服装语法卡选，禁止只写衬衫/裙子/white_shirt。\n"
         "以下材料可能已经过人工修改，一律以本次给定文本为准，不要用旧版记忆。\n\n"
@@ -568,6 +577,15 @@ def evaluate(
         if "BREAK" in content:
             lines.append("警告: 英文出现 BREAK，第三步混合写法不要用纯 Danbooru 分块")
             ok = False
+        article_hits = re.findall(
+            r"(?im)(?:^|[.\n]\s*)on the (?:left|right),?\s+an?\s+",
+            content,
+        )
+        if article_hits:
+            lines.append(
+                f"警告: {len(article_hits)} 处三人左右身份句仍带 a/an，应为 On the left, boy / On the right, lean young man"
+            )
+            ok = False
     elif style == PROMPT_STYLE_KREA2:
         lines.append(f"禁用质量套话: {quality_hits or '无'}")
         lines.append(f"Danbooru tag 残留: {len(tag_hits)}")
@@ -582,14 +600,14 @@ def evaluate(
         lines.append(f"禁用质量套话: {quality_hits or '无'}")
         lines.append(f"关键 Anima tag 命中: {len(tag_hits)}")
         ok = has_bible and found_count == expected and not quality_hits and len(tag_hits) >= 8
-    solo_pos = sum(
+    under_three_pos = sum(
         1
         for block in _NODE_BLOCK_RE.split(content)[1:]
-        if _is_solo_node(block) and _solo_node_has_positioning(block)
+        if _node_person_count(block) in {1, 2} and _node_has_positioning(block)
     )
-    if solo_pos:
+    if under_three_pos:
         lines.append(
-            f"警告: {solo_pos} 个单人节点含 on the left / on the right，Anima 会误认成两人"
+            f"警告: {under_three_pos} 个单人/双人节点含 on the left / on the right，左右站位只给三人"
         )
         ok = False
     lines.append(f"结构校验: {'通过' if ok else '未完全通过，请看正文'}")
@@ -642,25 +660,41 @@ _SOLO_POS_CN_RE = re.compile(
     r"|中央偏右"
 )
 _SOLO_FANGCHUAN_REPL = "- 防串站位：单人无需防串站位"
+_DUO_FANGCHUAN_REPL = "- 防串站位：双人无需左右站位"
+_LENS_DUO_RE = re.compile(r"^-\s*镜头[：:].*双人", re.M)
+_LENS_TRIO_RE = re.compile(r"^-\s*镜头[：:].*三人", re.M)
+_ON_SIDE_IDENTITY_RE = re.compile(
+    r"(?im)(^|[.\n][ \t]*)On the (?P<side>left|right)"
+    r"(?:[ \t]+of the frame)?"
+    r"(?:[ \t]*,[ \t]*|[ \t]+)"
+    r"(?:(?P<article>an?|the)[ \t]+)?"
+)
 
 
-def _is_solo_node(block: str) -> bool:
+def _node_person_count(block: str) -> int | None:
     cast_match = _CAST_LINE_RE.search(block)
     if cast_match:
         ids = {item.lower() for item in _CAST_ID_RE.findall(cast_match.group(0))}
         if ids:
-            return len(ids) == 1
+            return min(len(ids), 4)
     if _LENS_SOLO_RE.search(block):
-        return True
+        return 1
+    if _LENS_DUO_RE.search(block):
+        return 2
+    if _LENS_TRIO_RE.search(block):
+        return 3
     tags = {item.lower() for item in _COUNT_TAG_RE.findall(block)}
     if not tags:
-        return False
-    if tags & {"2girls", "3girls", "2boys", "3boys"}:
-        return False
-    return ("1girl" in tags) ^ ("1boy" in tags)
+        return None
+    girl_n = 3 if "3girls" in tags else 2 if "2girls" in tags else 1 if "1girl" in tags else 0
+    boy_n = 3 if "3boys" in tags else 2 if "2boys" in tags else 1 if "1boy" in tags else 0
+    total = girl_n + boy_n
+    if total:
+        return min(total, 4)
+    return None
 
 
-def _solo_node_has_positioning(block: str) -> bool:
+def _node_has_positioning(block: str) -> bool:
     return bool(_SOLO_POS_EN_RE.search(block) or _SOLO_POS_CN_RE.search(block))
 
 
@@ -670,28 +704,45 @@ def _cleanup_stripped_text(text: str) -> str:
     text = re.sub(r",\s*,+", ",", text)
     text = re.sub(r"[ \t]+([,.;:!?])", r"\1", text)
     text = re.sub(r"\n[ \t]+", "\n", text)
+    text = re.sub(r"(?m)^,\s*", "", text)
     return text
 
 
-def _strip_solo_positioning(block: str) -> str:
-    block = _FANGCHUAN_LINE_RE.sub(_SOLO_FANGCHUAN_REPL, block, count=1)
+def _strip_under_three_positioning(block: str, person_count: int) -> str:
+    fangchuan = _SOLO_FANGCHUAN_REPL if person_count == 1 else _DUO_FANGCHUAN_REPL
+    block = _FANGCHUAN_LINE_RE.sub(fangchuan, block, count=1)
     block = _SOLO_POS_EN_RE.sub("", block)
     block = _SOLO_POS_CN_RE.sub("", block)
     return _cleanup_stripped_text(block)
 
 
-def postprocess_step3_tags(text: str) -> str:
+def _normalize_on_side_identity(text: str) -> str:
+    def repl(match: re.Match[str]) -> str:
+        return f"{match.group(1)}On the {match.group('side').lower()}, "
+
+    return _ON_SIDE_IDENTITY_RE.sub(repl, text)
+
+
+def postprocess_step3_tags(text: str, prompt_style: str | None = None) -> str:
     text = _ERECT_PENIS_RE.sub("huge penis", text)
     parts = _NODE_BLOCK_RE.split(text)
-    if len(parts) <= 1:
-        return text
-    rewritten = [parts[0]]
-    for block in parts[1:]:
-        if _is_solo_node(block):
-            rewritten.append(_strip_solo_positioning(block))
-        else:
-            rewritten.append(block)
-    return "".join(rewritten)
+    if len(parts) > 1:
+        rewritten = [parts[0]]
+        for block in parts[1:]:
+            person_count = _node_person_count(block)
+            if person_count in {1, 2}:
+                rewritten.append(_strip_under_three_positioning(block, person_count))
+            else:
+                rewritten.append(block)
+        text = "".join(rewritten)
+    style = (
+        normalize_prompt_style(prompt_style)
+        if prompt_style
+        else PROMPT_STYLE_NATURAL
+    )
+    if style == PROMPT_STYLE_NATURAL:
+        text = _normalize_on_side_identity(text)
+    return text
 
 
 def _is_protocol_error(message: str) -> bool:
@@ -1062,7 +1113,7 @@ def generate_nl_tag_from_materials(
         on_progress=on_progress,
         api_backend=api_backend,
     )
-    nodes = postprocess_step3_tags(nodes)
+    nodes = postprocess_step3_tags(nodes, PROMPT_STYLE_NATURAL)
     usages = list(prior_usages or []) + [usage_tag]
     usage = merge_usage(*usages)
     content = f"{bible}\n\n{plot}\n\n{nodes.strip()}"
@@ -1241,7 +1292,7 @@ def generate_snapshot(
         max_tokens=max_tokens,
         api_backend=api_backend,
     )
-    content = postprocess_step3_tags(extract_content(result))
+    content = postprocess_step3_tags(extract_content(result), style)
     usage = normalize_usage(result.get("usage") or {})
     report = evaluate(content, style, count)
     run_dir = make_run_dir()
