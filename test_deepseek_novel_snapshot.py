@@ -57,6 +57,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         ),
         help="API 协议：auto、chat_completions 或 responses。也可用 SNAPSHOT_API_BACKEND",
     )
+    parser.add_argument(
+        "--sexy-clothing",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="开启后不跟故事原装，大胆改成更性感暴露的服装。也可用 SNAPSHOT_SEXY_CLOTHING",
+    )
     return parser.parse_args(argv)
 
 
@@ -75,6 +81,12 @@ def main(argv: list[str] | None = None) -> int:
         prompt_style = core.normalize_prompt_style(args.style)
         node_count = core.normalize_node_count(args.nodes)
         novel_path = core.resolve_novel_path(args.novel)
+        if args.sexy_clothing is None:
+            sexy_clothing = core.normalize_sexy_clothing(
+                os.environ.get("SNAPSHOT_SEXY_CLOTHING")
+            )
+        else:
+            sexy_clothing = bool(args.sexy_clothing)
     except (FileNotFoundError, IsADirectoryError, UnicodeDecodeError, OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
@@ -118,6 +130,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"小说: {novel_path}")
     print(f"提示词类型: {core.PROMPT_STYLE_LABELS[prompt_style]} ({prompt_style})")
     print(f"分镜数: {node_count}")
+    print(f"性感服装: {'开' if sexy_clothing else '关'}")
 
     try:
         if args.step == "3":
@@ -127,6 +140,7 @@ def main(argv: list[str] | None = None) -> int:
             tag_prompt = core.render_system_prompt(
                 core.load_text(core.prompt_path_for(prompt_style)),
                 node_count,
+                sexy_clothing=sexy_clothing,
             )
             print("流水线: 只跑第三步（按当前人物一致性与概括出 TAG）")
             print(f"第三步 TAG 提示词字数: {len(tag_prompt)}")
@@ -142,6 +156,7 @@ def main(argv: list[str] | None = None) -> int:
                 node_count=node_count,
                 on_progress=print,
                 api_backend=args.backend,
+                sexy_clothing=sexy_clothing,
             )
         else:
             max_chars = int(
@@ -153,14 +168,17 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
             if prompt_style == core.PROMPT_STYLE_NATURAL:
                 character_prompt = core.render_system_prompt(
-                    core.load_text(core.NL_CHARACTER_PROMPT_PATH)
+                    core.load_text(core.NL_CHARACTER_PROMPT_PATH),
+                    sexy_clothing=sexy_clothing,
                 )
                 summary_prompt = core.render_system_prompt(
-                    core.load_text(core.NL_SUMMARY_PROMPT_PATH)
+                    core.load_text(core.NL_SUMMARY_PROMPT_PATH),
+                    sexy_clothing=sexy_clothing,
                 )
                 tag_prompt = core.render_system_prompt(
                     core.load_text(core.prompt_path_for(prompt_style)),
                     node_count,
+                    sexy_clothing=sexy_clothing,
                 )
                 print("流水线: 自然语言三步独立对话")
                 print(f"第一步人物一致性提示词字数: {len(character_prompt)}")
@@ -170,6 +188,7 @@ def main(argv: list[str] | None = None) -> int:
                 system_prompt = core.render_system_prompt(
                     core.load_text(core.prompt_path_for(prompt_style)),
                     node_count,
+                    sexy_clothing=sexy_clothing,
                 )
                 print(f"系统提示词字数: {len(system_prompt)}")
             print(f"小说送入字数: {len(novel)}")
@@ -190,6 +209,7 @@ def main(argv: list[str] | None = None) -> int:
                 node_count=node_count,
                 on_progress=print,
                 api_backend=args.backend,
+                sexy_clothing=sexy_clothing,
             )
     except Exception as exc:
         print(str(exc), file=sys.stderr)

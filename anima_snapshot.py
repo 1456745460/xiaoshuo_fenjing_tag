@@ -52,6 +52,23 @@ MIN_NODE_COUNT = 1
 MAX_NODE_COUNT = 100
 DEFAULT_NODE_COUNT = 12
 NODE_COUNT_PLACEHOLDER = "{{NODE_COUNT}}"
+CLOTHING_MODE_PLACEHOLDER = "{{CLOTHING_MODE}}"
+DEFAULT_SEXY_CLOTHING = False
+SEXY_CLOTHING_RULE = """【本局已开启「性感服装」】此条覆盖后文所有「服装必须跟正文 / 档案 / 概括」的条款，包括「正文写到的服装禁止改写」「档案默认服装必须继承」。
+- 发色、瞳色、体型、年龄、姿势、场景、场次仍按正文/档案/概括；只有服装整条链路改写。
+- 禁止沿用故事里的常服、职业装、校服、家居服、睡衣原样。正文或档案写衬衫/裙子/制服/睡衣，也必须丢掉原装，另做更性感的一套。
+- 必须大胆猜想：为每个可入画角色重新设计更暴露、更能拉开视觉差的服装。禁止因为「正文写了白衬衫」就继续白衬衫。
+- 每套服装必须写全：品类、颜色、暴露状态、花纹、样式、点缀、面料、剪裁。禁止只写「性感」或只写品类。服装全部记入推断项，不要假装来自原文。
+- 优先叠加短、紧、薄、透、低胸、露腰、露背、高开衩、吊带、超短裙、贴身皮/漆皮、蕾丝、渔网、吊带袜、细高跟、内衣外穿、湿身贴体、半脱露肤。不同角色必须错开颜色、品类、花纹、点缀，禁止全员同一套黑丝御姐。
+- 颜色大胆：酒红、黑、深紫、珊瑚粉、香槟金、纯白蕾丝、暗红碎花、墨绿、肤色薄纱。禁止全员白衬衫黑裤。
+- 花纹/样式/点缀必须写：碎花、条纹、波点、蕾丝花边、蝴蝶结、金属扣、交叉绑带、颈环、腰链、吊坠、开窗、荷叶边、镂空、侧开衩。
+- 暴露状态必须写清：哪些部位被布料覆盖、哪些被剪裁露出（锁骨、乳沟、腰腹、大腿根、臀线、腋下、后背、侧乳）。情爱节点仍按脱衣顺序更新「脱掉哪件、落到哪里、还剩什么」，但脱的是这套性感服装，不是故事原装。
+- 可保留场景时代的影子（现代都市不要盔甲，古风不要西装），服装本身必须重新大胆设计。
+- 同一角色全节点沿用这套性感默认装，只随脱衣/凌乱更新状态。
+- 男性也要更性感：更贴身、更低腰、敞开领口、更少布料或更暴露的穿着状态；不要给男性套女装，除非正文就是女装。
+- 禁止用 beautiful / sexy 这种空词代替造型。品类仍从服装语法卡选，可叠加露、透、短、紧、蕾丝、渔网、吊带。
+- 性感向品类优先：crop top / camisole / bustier / lace bralette / off-shoulder blouse；micro miniskirt / high-slit dress / micro shorts；lingerie / babydoll / sheer nightgown / garter belt；fishnets / lace thighhighs / stay-ups / stiletto heels；点缀 choker / waist chain / ribbon / lace trim / cross straps。
+"""
 API_BACKEND_AUTO = "auto"
 API_BACKEND_CHAT = "chat_completions"
 API_BACKEND_RESPONSES = "responses"
@@ -268,13 +285,62 @@ def normalize_node_count(raw: object) -> int:
     return value
 
 
-def render_system_prompt(text: str, node_count: int | None = None) -> str:
-    if NODE_COUNT_PLACEHOLDER not in text:
-        return text
-    if node_count is None:
-        raise ValueError(f"系统提示词含 {NODE_COUNT_PLACEHOLDER}，但未提供分镜数")
-    count = normalize_node_count(node_count)
-    return text.replace(NODE_COUNT_PLACEHOLDER, str(count))
+def normalize_sexy_clothing(raw: object) -> bool:
+    if isinstance(raw, bool):
+        return raw
+    if raw is None:
+        return DEFAULT_SEXY_CLOTHING
+    text = str(raw).strip().lower()
+    if text in {"1", "true", "yes", "on", "开", "是"}:
+        return True
+    if text in {"", "0", "false", "no", "off", "关", "否"}:
+        return False
+    raise ValueError("性感服装开关必须是开或关")
+
+
+def clothing_mode_rule(sexy_clothing: bool) -> str:
+    return SEXY_CLOTHING_RULE.strip() if sexy_clothing else ""
+
+
+def clothing_user_instruction(sexy_clothing: bool) -> str:
+    if sexy_clothing:
+        return (
+            "本局已开启「性感服装」：禁止沿用故事/档案/概括里的原装。"
+            "必须大胆猜想更性感的服装，写全品类、颜色、暴露状态、花纹、样式、点缀、面料、剪裁。"
+            "脱衣只更新这套性感装的状态。发色、瞳色、体型、姿势、场次仍按原文/档案/概括。"
+        )
+    return (
+        "服装必须写颜色、花纹、面料纹理、剪裁；品类从服装语法卡选，禁止只写衬衫/裙子/white_shirt。"
+    )
+
+
+def apply_clothing_mode(text: str, sexy_clothing: bool = False) -> str:
+    enabled = normalize_sexy_clothing(sexy_clothing)
+    block = clothing_mode_rule(enabled)
+    if CLOTHING_MODE_PLACEHOLDER in text:
+        if block:
+            return text.replace(CLOTHING_MODE_PLACEHOLDER, block + "\n")
+        return text.replace(CLOTHING_MODE_PLACEHOLDER + "\n", "").replace(
+            CLOTHING_MODE_PLACEHOLDER, ""
+        )
+    if enabled and block:
+        return block + "\n\n" + text
+    return text
+
+
+def render_system_prompt(
+    text: str,
+    node_count: int | None = None,
+    sexy_clothing: bool = False,
+) -> str:
+    rendered = text
+    if NODE_COUNT_PLACEHOLDER in rendered:
+        if node_count is None:
+            raise ValueError(f"系统提示词含 {NODE_COUNT_PLACEHOLDER}，但未提供分镜数")
+        rendered = rendered.replace(
+            NODE_COUNT_PLACEHOLDER, str(normalize_node_count(node_count))
+        )
+    return apply_clothing_mode(rendered, sexy_clothing)
 
 
 def emit_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
@@ -327,6 +393,7 @@ def build_user_prompt(
     novel_name: str,
     prompt_style: str = DEFAULT_PROMPT_STYLE,
     node_count: int = DEFAULT_NODE_COUNT,
+    sexy_clothing: bool = False,
 ) -> str:
     style = normalize_prompt_style(prompt_style)
     count = normalize_node_count(node_count)
@@ -344,9 +411,11 @@ def build_user_prompt(
         )
     elif style == PROMPT_STYLE_NATURAL:
         prompt_rule = (
-            "中文提示词必须是完整画面描述；英文必须是 Anima 混合写法："
+            "中文提示词必须是逗号分隔的画面要素，只写看得见的外形、服装、姿势、道具，禁止小说修辞。"
+            "英文必须是 Anima 混合写法："
             "标签块（masterpiece, best quality, score_7 + 1girl/1boy + 视线互动 + 按人外观服装）空一行后再写短句。"
             "禁止英文散文、snake_case、BREAK、(word:1.2)、looking_at_viewer。"
+            "禁止憨痴惹人爱怜、雪白细嫩、斯文端正、眼含雾、misty、sweet naive、delicate、rim light。"
             "多人同框必须一人一句，主语带外貌锚点，独有特征禁止写成全画面清单。"
             "段首先锁人数：画面里只有 N 个人（N≤3）。每个分镜最多 3 个可识别人物；正文超过 3 人必须拆镜或只留核心 1～3 人，禁止 4 人同框。"
             "禁止用玻璃倒影、married/丈夫/妻子、走廊路人把两人写成三人、三人写成四人。"
@@ -379,7 +448,7 @@ def build_user_prompt(
         "防合影：多人禁止看镜头，必须对视或看对方身体，机位用侧面/过肩/面对面，不要正面并排。\n"
         "表情：写五官动作；女性爱按强度选愉悦/高潮/阿嘿颜；男色欲用邪笑/得意/坏笑，禁止一律微笑，禁止乱加。\n"
         "角色必须一眼能分清：正文没写死时，不同人要错开发色、长短发、身材、胡子/眼镜/痣；禁止全员同一张脸。\n"
-        "服装必须写颜色、花纹、面料纹理、剪裁；品类从服装语法卡选，禁止只写衬衫/裙子/white_shirt。\n\n"
+        f"{clothing_user_instruction(sexy_clothing)}\n\n"
         f"小说文件名：{novel_name}\n\n"
         "<novel>\n"
         f"{novel}\n"
@@ -387,10 +456,17 @@ def build_user_prompt(
     )
 
 
-def build_nl_character_user_prompt(novel: str, novel_name: str) -> str:
+def build_nl_character_user_prompt(
+    novel: str,
+    novel_name: str,
+    sexy_clothing: bool = False,
+) -> str:
     return (
         "请根据下面这篇 txt 小说正文，只产出「角色一致性档案」。\n"
-        "不要写节点，不要写中英文提示词，不要写剧情摘要。不要寒暄。\n\n"
+        "锁定中英文外貌必须是逗号分隔的外形词，只写看得见的发、瞳、脸型、身材、皮肤、眼镜。\n"
+        "禁止憨痴惹人爱怜、甜相、雪白细嫩、斯文端正、眼含雾、misty、sweet naive、delicate。\n"
+        "不要写节点，不要写中英文提示词，不要写剧情摘要。不要寒暄。\n"
+        f"{clothing_user_instruction(sexy_clothing)}\n\n"
         f"小说文件名：{novel_name}\n\n"
         "<novel>\n"
         f"{novel}\n"
@@ -398,12 +474,23 @@ def build_nl_character_user_prompt(novel: str, novel_name: str) -> str:
     )
 
 
-def build_nl_summary_user_prompt(novel: str, novel_name: str) -> str:
+def build_nl_summary_user_prompt(
+    novel: str,
+    novel_name: str,
+    sexy_clothing: bool = False,
+) -> str:
+    extra = ""
+    if sexy_clothing:
+        extra = (
+            "本局已开启「性感服装」：姿势、场次、脱衣顺序仍按正文；"
+            "服装本身不要跟故事原装，改写成更性感的一套，并按这套性感装写脱衣/还剩什么。\n"
+        )
     return (
         "请根据下面这篇 txt 小说正文，写出保留完整故事结构的详细概括。\n"
         "不要过于精简。严格保留整体故事结构、不同爱情姿势、不同爱情经过。\n"
         "每一场情爱单独写，每换一种姿势就分条写，禁止合并成「两人做爱」。\n"
-        "不要写角色外貌档案，不要写分镜提示词。不要寒暄。\n\n"
+        "不要写角色外貌档案，不要写分镜提示词。不要寒暄。\n"
+        f"{extra}\n"
         f"小说文件名：{novel_name}\n\n"
         "<novel>\n"
         f"{novel}\n"
@@ -416,17 +503,21 @@ def build_nl_tag_user_prompt(
     summary: str,
     novel_name: str,
     node_count: int,
+    sexy_clothing: bool = False,
 ) -> str:
     count = normalize_node_count(node_count)
     prompt_rule = (
-        "中文提示词必须是完整画面描述，一人一句，主语带外貌锚点。"
+        "中文提示词必须是逗号分隔的画面要素，一人一截，主语带外形词。"
+        "只写看得见的外形、服装、姿势、五官动作、道具。禁止小说修辞。"
+        "禁止憨痴惹人爱怜、甜相、极为饱满、圆润柔和、雪白细嫩、斯文端正、眼含雾、蓝光侧照。"
         "英文提示词必须是 Anima 混合写法：先写小写空格分词的标签块"
         "（masterpiece, best quality, score_7，NSFW 加 explicit，再写 1girl/1boy 和按人分行的外观服装），"
-        "空一行后写短英文：单人 3 到 4 句（构图、看哪里、此人、光影），"
-        "双人 4 到 6 句（构图、谁看谁、此人、彼人、光影、归属），"
-        "三人 4 到 6 句（构图、谁看谁、左、右、光影、归属）。"
+        "空一行后写短英文：单人 3 到 4 句（构图、看哪里、此人、场景道具），"
+        "双人 4 到 6 句（构图、谁看谁、此人、彼人、场景道具、归属），"
+        "三人 4 到 6 句（构图、谁看谁、左、右、场景道具、归属）。"
+        "标签用 round face / large breasts / pale skin，禁止 misty / sweet naive / delicate / rim light。"
         "禁止把英文写成一篇嵌套从句散文。禁止 snake_case、BREAK、(word:1.2)、looking_at_viewer。"
-        "锁定外貌要素写进英文标签段；短句只回锚 2～4 个辨识点，不要把锁定句整段嵌进从句。"
+        "锁定外形词写进英文标签段和中文提示词；短句只回锚 2～4 个辨识点，不要把文艺锁定句整段嵌进从句。"
         "段首先锁人数：画面里只有 N 个人（N≤3）。每个分镜最多 3 个可识别人物；"
         "概括超过 3 人必须拆镜或只留核心 1～3 人，禁止 4 人同框。"
         "禁止用玻璃倒影、married/丈夫/妻子、走廊路人把两人写成三人、三人写成四人。"
@@ -444,7 +535,7 @@ def build_nl_tag_user_prompt(
         "请根据下面已经完成的「角色一致性档案」和「小说内容概括」，严格执行系统提示词。\n"
         f"本次必须输出正好 {count} 个关键节点，不多不少。状态表写要点即可，"
         f"但{prompt_rule}\n"
-        "不要再读原文，不要重写人物外貌。锁定外貌句必须原样粘贴。\n"
+        "不要再读原文，不要重写发色瞳色体型脸型。锁定句若是文艺描写，先收成短外形词再写入，禁止原样粘贴。\n"
         "不要再输出角色一致性档案，不要再输出小说概括。直接从节点目录写起。\n"
         "概括里的不同爱情姿势、不同爱情经过必须尽量用不同节点覆盖，禁止合并省略。\n"
         "防串台：禁止把发色、眼镜、服装混成一袋；一人戴眼镜则另一人必须明确不戴。\n"
@@ -455,7 +546,7 @@ def build_nl_tag_user_prompt(
         "短句写谁看谁，机位用侧面/过肩/面对面，不要正面并排。\n"
         "三人左右身份句：On the left, boy / On the right, lean young man。站位后逗号，禁止 a / an。单人、双人直接写身份。\n"
         "表情：写五官动作；女性爱按强度选愉悦/高潮/阿嘿颜；男色欲用邪笑/得意/坏笑，禁止一律微笑，禁止乱加。\n"
-        "服装必须写颜色、花纹、面料纹理、剪裁；品类从服装语法卡选，禁止只写衬衫/裙子/white_shirt。\n"
+        f"{clothing_user_instruction(sexy_clothing)}\n"
         "以下材料可能已经过人工修改，一律以本次给定文本为准，不要用旧版记忆。\n\n"
         f"小说文件名：{novel_name}\n\n"
         "<character_bible>\n"
@@ -576,6 +667,20 @@ def evaluate(
             ok = False
         if "BREAK" in content:
             lines.append("警告: 英文出现 BREAK，第三步混合写法不要用纯 Danbooru 分块")
+            ok = False
+        prompt_blob = "\n".join(
+            match.group(1)
+            for match in re.finditer(
+                r"(?:中文提示词|英文提示词)[：:](.*?)(?=\n- |\n#{1,3}\s|\Z)",
+                content,
+                flags=re.S,
+            )
+        )
+        literary_hits = _LITERARY_WARN_RE.findall(prompt_blob)
+        if literary_hits:
+            lines.append(
+                f"警告: {len(literary_hits)} 处文艺修辞残留（憨痴惹人爱怜/雪白细嫩/misty/sweet naive 等），应改成圆脸/大胸/白皮肤等外形词"
+            )
             ok = False
         article_hits = re.findall(
             r"(?im)(?:^|[.\n]\s*)on the (?:left|right),?\s+an?\s+",
@@ -723,6 +828,96 @@ def _normalize_on_side_identity(text: str) -> str:
     return _ON_SIDE_IDENTITY_RE.sub(repl, text)
 
 
+_CN_LITERARY_REPLACEMENTS = (
+    ("憨痴惹人爱怜的甜相", "可爱脸"),
+    ("憨痴惹人爱怜的少女感", "年轻"),
+    ("憨痴惹人爱怜", "可爱"),
+    ("憨痴甜相", "可爱脸"),
+    ("惹人爱怜", ""),
+    ("极为饱满挺翘的大胸", "大胸"),
+    ("饱满挺翘的大胸", "大胸"),
+    ("极为饱满挺翘", "大胸"),
+    ("圆润柔和的脸型", "圆脸"),
+    ("雪白细嫩的皮肤", "白皮肤"),
+    ("雪白细嫩肤质", "白皮肤"),
+    ("皮肤雪白细腻", "白皮肤"),
+    ("雪白细嫩", "白皮肤"),
+    ("雪白细腻", "白皮肤"),
+    ("斯文端正刮净的脸", "刮净脸"),
+    ("轮廓分明刮净的脸", "刮净脸"),
+    ("清秀端正的脸", "刮净脸"),
+    ("斯文端正", ""),
+    ("清秀端正", ""),
+    ("眼含雾", "半睁眼"),
+    ("眼含春", "半睁眼"),
+    ("脸颊强烈潮红", "脸红"),
+    ("脸颊飞红", "脸红"),
+    ("脸颊潮红", "脸红"),
+    ("脸颊泛红", "脸红"),
+    ("脸颊羞红", "脸红"),
+    ("脸颊通红", "脸红"),
+    ("粉臀轻摆", "臀摆动"),
+    ("小嘴喘气", "张嘴喘气"),
+    ("唇大张浪叫", "张嘴"),
+    ("浅浅淡淡的阴毛", "稀疏阴毛"),
+    ("浅浅淡淡阴毛", "稀疏阴毛"),
+    ("似笑非笑", "嘴角微扬"),
+    ("薄怒", "微皱眉"),
+    ("乳房丰满坚挺", "大胸"),
+    ("屁股圆润上翘", "圆臀"),
+    ("高翘圆臀", "圆臀"),
+    ("双腿修长笔直", "长腿"),
+    ("体态丰满圆润", "丰满身材"),
+    ("嘴角上挑露出淫笑", "嘴角上扬"),
+    ("唇瓣微张", "嘴唇微张"),
+    ("眉头轻蹙", "微皱眉"),
+    ("眉头紧蹙", "皱眉"),
+    ("心不在焉", ""),
+    ("电视蓝光侧照", "电视"),
+    ("橙红夕照侧逆光", "傍晚"),
+    ("暮色蓝调侧光", "傍晚"),
+    ("夜色冷光侧照", "夜"),
+    ("床头灯暖黄侧光", "台灯"),
+    ("路灯昏黄侧光", "路灯"),
+    ("路灯余光侧照", "路灯"),
+    ("前景虚化", ""),
+    ("成熟妩媚", "成熟脸"),
+)
+_EN_LITERARY_REPLACEMENTS = (
+    ("a sweet naive look", "innocent face"),
+    ("sweet naive look", "innocent face"),
+    ("misty black eyes", "black eyes"),
+    ("very full and perky large breasts", "large breasts"),
+    ("very full perky large breasts", "large breasts"),
+    ("round soft facial features", "round face"),
+    ("round soft face", "round face"),
+    ("round high buttocks", "round ass"),
+    ("fair delicate skin", "pale skin"),
+    ("a mature alluring look", "mature face"),
+    ("mature alluring look", "mature face"),
+    ("eyes misty", "eyes half closed"),
+    ("rim light from the side", ""),
+    ("warm yellow bedside lamp light from the side", "lamp"),
+    ("warm yellow lamp light from the side", "lamp"),
+    ("orange sunset rim light from the side", "dusk"),
+    ("cool blue dusk side light", "dusk"),
+    ("unaware of the camera, candid", "not looking at camera"),
+    ("unaware of the camera", "not looking at camera"),
+)
+_LITERARY_WARN_RE = re.compile(
+    r"憨痴惹人爱怜|雪白细嫩|斯文端正|圆润柔和|眼含雾|sweet naive|misty black|fair delicate|round soft face",
+    re.I,
+)
+
+
+def _flatten_literary_phrasing(text: str) -> str:
+    for src, dst in _CN_LITERARY_REPLACEMENTS:
+        text = text.replace(src, dst)
+    for src, dst in _EN_LITERARY_REPLACEMENTS:
+        text = re.sub(re.escape(src), dst, text, flags=re.I)
+    return _cleanup_stripped_text(text)
+
+
 def postprocess_step3_tags(text: str, prompt_style: str | None = None) -> str:
     text = _ERECT_PENIS_RE.sub("huge penis", text)
     parts = _NODE_BLOCK_RE.split(text)
@@ -742,6 +937,7 @@ def postprocess_step3_tags(text: str, prompt_style: str | None = None) -> str:
     )
     if style == PROMPT_STYLE_NATURAL:
         text = _normalize_on_side_identity(text)
+        text = _flatten_literary_phrasing(text)
     return text
 
 
@@ -940,9 +1136,11 @@ def write_output(
     node_count: int = DEFAULT_NODE_COUNT,
     extra_header: list[str] | None = None,
     run_dir: Path | None = None,
+    sexy_clothing: bool = False,
 ) -> Path:
     style = normalize_prompt_style(prompt_style)
     count = normalize_node_count(node_count)
+    sexy = normalize_sexy_clothing(sexy_clothing)
     if output_path is None:
         dest = run_dir or make_run_dir()
         dest.mkdir(parents=True, exist_ok=True)
@@ -958,6 +1156,7 @@ def write_output(
         f"- 小说: `{novel_path}`",
         f"- 提示词类型: `{PROMPT_STYLE_LABELS[style]}` ({style})",
         f"- 分镜数: `{count}`",
+        f"- 性感服装: {'开' if sexy else '关'}",
         f"- 输出目录: `{target.parent}`",
         *(extra_header or []),
         f"- prompt_tokens: {usage.get('prompt_tokens', '未知')}",
@@ -1091,6 +1290,7 @@ def generate_nl_tag_from_materials(
     extra_system_chars: int = 0,
     api_backend: str | None = None,
     run_dir: Path | None = None,
+    sexy_clothing: bool = False,
 ) -> dict:
     bible = character_bible.strip()
     plot = summary.strip()
@@ -1099,7 +1299,12 @@ def generate_nl_tag_from_materials(
     if not plot:
         raise ValueError("故事概括不能为空")
     count = normalize_node_count(node_count)
-    tag_system = render_system_prompt(load_text(prompt_path_for(PROMPT_STYLE_NATURAL)), count)
+    sexy = normalize_sexy_clothing(sexy_clothing)
+    tag_system = render_system_prompt(
+        load_text(prompt_path_for(PROMPT_STYLE_NATURAL)),
+        count,
+        sexy_clothing=sexy,
+    )
     dest = run_dir or make_run_dir()
     character_path, summary_path = write_nl_drafts(novel_path, bible, plot, run_dir=dest)
     nodes, usage_tag = run_chat_step(
@@ -1108,7 +1313,13 @@ def generate_nl_tag_from_materials(
         api_key=api_key,
         model=model,
         system_prompt=tag_system,
-        user_prompt=build_nl_tag_user_prompt(bible, plot, novel_path.name, count),
+        user_prompt=build_nl_tag_user_prompt(
+            _flatten_literary_phrasing(bible),
+            plot,
+            novel_path.name,
+            count,
+            sexy_clothing=sexy,
+        ),
         max_tokens=max_tokens,
         on_progress=on_progress,
         api_backend=api_backend,
@@ -1153,6 +1364,7 @@ def generate_nl_tag_from_materials(
         node_count=count,
         extra_header=extra_header,
         run_dir=dest,
+        sexy_clothing=sexy,
     )
     return {
         "content": content,
@@ -1165,6 +1377,7 @@ def generate_nl_tag_from_materials(
         "system_chars": extra_system_chars + len(tag_system),
         "prompt_style": PROMPT_STYLE_NATURAL,
         "node_count": count,
+        "sexy_clothing": sexy,
         "pipeline": "nl_step3",
         "character_bible": bible,
         "summary": plot,
@@ -1188,10 +1401,16 @@ def generate_nl_three_step_snapshot(
     on_progress: Callable[[str], None] | None = None,
     on_step_result: Callable[[str, str], None] | None = None,
     api_backend: str | None = None,
+    sexy_clothing: bool = False,
 ) -> dict:
     count = normalize_node_count(node_count)
-    character_system = render_system_prompt(load_text(NL_CHARACTER_PROMPT_PATH))
-    summary_system = render_system_prompt(load_text(NL_SUMMARY_PROMPT_PATH))
+    sexy = normalize_sexy_clothing(sexy_clothing)
+    character_system = render_system_prompt(
+        load_text(NL_CHARACTER_PROMPT_PATH), sexy_clothing=sexy
+    )
+    summary_system = render_system_prompt(
+        load_text(NL_SUMMARY_PROMPT_PATH), sexy_clothing=sexy
+    )
     run_dir = make_run_dir()
 
     character_bible, usage_1 = run_chat_step(
@@ -1200,7 +1419,9 @@ def generate_nl_three_step_snapshot(
         api_key=api_key,
         model=model,
         system_prompt=character_system,
-        user_prompt=build_nl_character_user_prompt(novel, novel_path.name),
+        user_prompt=build_nl_character_user_prompt(
+            novel, novel_path.name, sexy_clothing=sexy
+        ),
         max_tokens=max_tokens,
         on_progress=on_progress,
         api_backend=api_backend,
@@ -1215,7 +1436,9 @@ def generate_nl_three_step_snapshot(
         api_key=api_key,
         model=model,
         system_prompt=summary_system,
-        user_prompt=build_nl_summary_user_prompt(novel, novel_path.name),
+        user_prompt=build_nl_summary_user_prompt(
+            novel, novel_path.name, sexy_clothing=sexy
+        ),
         max_tokens=max_tokens,
         on_progress=on_progress,
         api_backend=api_backend,
@@ -1241,6 +1464,7 @@ def generate_nl_three_step_snapshot(
         extra_system_chars=len(character_system) + len(summary_system),
         api_backend=api_backend,
         run_dir=run_dir,
+        sexy_clothing=sexy,
     )
     result["pipeline"] = "nl_three_step"
     return result
@@ -1259,9 +1483,11 @@ def generate_snapshot(
     on_progress: Callable[[str], None] | None = None,
     on_step_result: Callable[[str, str], None] | None = None,
     api_backend: str | None = None,
+    sexy_clothing: bool = False,
 ) -> dict:
     style = normalize_prompt_style(prompt_style)
     count = normalize_node_count(node_count)
+    sexy = normalize_sexy_clothing(sexy_clothing)
     novel, truncated = clip_novel(load_text(novel_path), novel_max_chars)
     if not novel:
         raise ValueError(f"小说文件是空的: {novel_path}")
@@ -1278,10 +1504,15 @@ def generate_snapshot(
             on_progress=on_progress,
             on_step_result=on_step_result,
             api_backend=api_backend,
+            sexy_clothing=sexy,
         )
 
-    system_prompt = render_system_prompt(load_text(prompt_path_for(style)), count)
-    user_prompt = build_user_prompt(novel, novel_path.name, style, count)
+    system_prompt = render_system_prompt(
+        load_text(prompt_path_for(style)), count, sexy_clothing=sexy
+    )
+    user_prompt = build_user_prompt(
+        novel, novel_path.name, style, count, sexy_clothing=sexy
+    )
     emit_progress(on_progress, "正在调用接口生成节点...")
     result = chat_completion(
         api_url=api_url,
@@ -1305,6 +1536,7 @@ def generate_snapshot(
         prompt_style=style,
         node_count=count,
         run_dir=run_dir,
+        sexy_clothing=sexy,
     )
     return {
         "content": content,
@@ -1318,6 +1550,7 @@ def generate_snapshot(
         "prompt_style": style,
         "node_count": count,
         "pipeline": "single",
+        "sexy_clothing": sexy,
     }
 
 

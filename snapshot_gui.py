@@ -54,6 +54,11 @@ class SnapshotApp(tk.Tk):
         except ValueError:
             saved_count = core.DEFAULT_NODE_COUNT
         self._saved_node_count = str(saved_count)
+        try:
+            saved_sexy = core.normalize_sexy_clothing(self.cfg.get("sexy_clothing"))
+        except ValueError:
+            saved_sexy = core.DEFAULT_SEXY_CLOTHING
+        self.sexy_clothing_var = tk.BooleanVar(value=saved_sexy)
         self.show_key = False
         self._build()
         self._center_window(920, 820)
@@ -174,6 +179,16 @@ class SnapshotApp(tk.Tk):
         self.node_count.bind("<FocusOut>", lambda _event: self._persist())
         self.node_count.bind("<Return>", lambda _event: self._persist())
 
+        ttk.Label(form, text="性感服装").grid(row=8, column=0, sticky=tk.W, pady=6)
+        sexy_row = ttk.Frame(form)
+        sexy_row.grid(row=8, column=1, columnspan=2, sticky=tk.W, pady=6)
+        ttk.Checkbutton(
+            sexy_row,
+            text="开启后不跟故事原装，大胆改成更暴露的服装",
+            variable=self.sexy_clothing_var,
+            command=self._persist,
+        ).pack(side=tk.LEFT)
+
         actions = ttk.Frame(root)
         actions.pack(fill=tk.X, pady=(16, 8))
         self.start_btn = ttk.Button(actions, text="开始生成", command=self.start_generate)
@@ -202,7 +217,7 @@ class SnapshotApp(tk.Tk):
 
         ttk.Label(
             root,
-            text="自然语言：前两步结果会出现在「人物一致性」「故事概括」页，改完后可只重跑第三步。第三步英文是 Anima 混合写法（标签+短句），不是散文。",
+            text="自然语言：前两步结果会出现在「人物一致性」「故事概括」页，改完后可只重跑第三步。勾选「性感服装」后，出图服装不跟故事原装。",
         ).pack(anchor=tk.W, pady=(0, 4))
 
         self.notebook = ttk.Notebook(root)
@@ -221,11 +236,12 @@ class SnapshotApp(tk.Tk):
             "2. API 协议选「自动」即可：grok-4.6 走 Responses，DeepSeek 走 Chat Completions\n"
             "3. 点「获取模型」后选择模型\n"
             "4. 选择提示词类型：Danbooru（Anima tag）、自然语言、或 Krea2（二次元分镜简报，贴英文）\n"
-            "   自然语言会分三次独立对话：人物一致性 → 详细概括 → Anima 混合 TAG（标签+短句）\n"
+            "   自然语言会分三次独立对话：人物一致性 → 详细概括 → Anima 混合 TAG（外形词标签+短句，不要小说修辞）\n"
             f"5. 填写分镜数（{core.MIN_NODE_COUNT} 到 {core.MAX_NODE_COUNT}，生成固定数量）\n"
-            "6. 选择 txt 小说，点「开始生成」\n"
-            "7. 自然语言生成后，可在「人物一致性」「故事概括」页直接改稿，再点「只跑第三步出 TAG」\n"
-            "8. 完成后会自动打开生成的 md，也可点「打开文件所在目录」\n"
+            "6. 需要更暴露的服装时勾选「性感服装」：不跟故事原装，大胆改品类/颜色/暴露/花纹/样式/点缀\n"
+            "7. 选择 txt 小说，点「开始生成」\n"
+            "8. 自然语言生成后，可在「人物一致性」「故事概括」页直接改稿，再点「只跑第三步出 TAG」\n"
+            "9. 完成后会自动打开生成的 md，也可点「打开文件所在目录」\n"
             "   每次生成会新建 outputs/年月日时分秒/，自然语言写入 1_character.md、2_summary.md、3_tags.md\n",
         )
         self.log.configure(state=tk.DISABLED)
@@ -323,6 +339,7 @@ class SnapshotApp(tk.Tk):
             "novel_path": self.novel_path.get().strip(),
             "prompt_style": self.prompt_style_var.get().strip(),
             "node_count": self.node_count.get().strip(),
+            "sexy_clothing": bool(self.sexy_clothing_var.get()),
             "models": list(self.model_combo["values"] or []),
         }
 
@@ -426,6 +443,11 @@ class SnapshotApp(tk.Tk):
             messagebox.showwarning("参数错误", str(exc))
             return None
         try:
+            sexy_clothing = core.normalize_sexy_clothing(fields.get("sexy_clothing"))
+        except ValueError as exc:
+            messagebox.showwarning("参数错误", str(exc))
+            return None
+        try:
             resolved_backend = core.normalize_api_backend(
                 fields.get("api_backend"), fields["model"]
             )
@@ -439,6 +461,7 @@ class SnapshotApp(tk.Tk):
             "novel_path": novel_path,
             "prompt_style": prompt_style,
             "node_count": node_count,
+            "sexy_clothing": sexy_clothing,
             "api_backend": fields.get("api_backend") or core.DEFAULT_API_BACKEND,
             "resolved_backend": resolved_backend,
         }
@@ -454,6 +477,7 @@ class SnapshotApp(tk.Tk):
         prompt_style = args["prompt_style"]
         max_tokens = args["max_tokens"]
         node_count = args["node_count"]
+        sexy_clothing = args["sexy_clothing"]
         nl_mode = prompt_style == core.PROMPT_STYLE_NATURAL
         wait_hint = (
             "正在生成，自然语言约 3~8 分钟（三次独立对话）..."
@@ -468,7 +492,8 @@ class SnapshotApp(tk.Tk):
         self._append_log(
             f"开始生成：{novel_path.name} / {fields['model']} / "
             f"协议={backend_label} / max_tokens={max_tokens} / "
-            f"提示词={style_label} / 分镜数={node_count}"
+            f"提示词={style_label} / 分镜数={node_count} / "
+            f"性感服装={'开' if sexy_clothing else '关'}"
         )
         if nl_mode:
             self._append_log(
@@ -495,6 +520,7 @@ class SnapshotApp(tk.Tk):
                     on_progress=on_progress,
                     on_step_result=on_step_result,
                     api_backend=args["api_backend"],
+                    sexy_clothing=sexy_clothing,
                 )
                 self.after(0, lambda result=result: self._on_generated(result, None))
             except Exception as exc:
@@ -544,7 +570,8 @@ class SnapshotApp(tk.Tk):
         )
         self._append_log(
             f"只跑第三步：{novel_path.name} / {fields['model']} / "
-            f"协议={backend_label} / 分镜数={args['node_count']}"
+            f"协议={backend_label} / 分镜数={args['node_count']} / "
+            f"性感服装={'开' if args['sexy_clothing'] else '关'}"
         )
         self._append_log("将使用当前「人物一致性」和「故事概括」页的文本，不再读小说原文。")
 
@@ -564,6 +591,7 @@ class SnapshotApp(tk.Tk):
                     node_count=args["node_count"],
                     on_progress=on_progress,
                     api_backend=args["api_backend"],
+                    sexy_clothing=args["sexy_clothing"],
                 )
                 self.after(0, lambda result=result: self._on_generated(result, None, step3=True))
             except Exception as exc:

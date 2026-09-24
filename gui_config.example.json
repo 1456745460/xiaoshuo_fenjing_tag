@@ -7,5 +7,6 @@
   "novel_path": "",
   "prompt_style": "danbooru",
   "node_count": "12",
+  "sexy_clothing": false,
   "models": []
 }
